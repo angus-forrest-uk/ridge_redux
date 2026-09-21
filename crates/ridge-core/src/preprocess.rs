@@ -302,7 +302,7 @@ mod tests {
         // min) and 10.0 cells fall below it and are masked as water.
         assert!(out[(1, 0)].is_nan(), "deep cell masked as water");
         // Flat 50/50 patch: quantized gradient 0 < 3 -> lake.
-        assert!(out[(1, 2 - 2)].is_nan() || out[(1, 1)].is_nan() == false);
+        assert!(out[(1, 2 - 2)].is_nan() || !out[(1, 1)].is_nan());
         // Steep cells survive; note the row flip (out row 0 = input row 1).
         assert_eq!(out[(0, 1)], 0.9 * 40.0);
         assert_eq!(out[(0, 3)], 1.0 * 40.0);

@@ -372,7 +372,7 @@ mod tests {
         assert!(svg.contains("Mountains"));
         assert!(svg.contains("Cinzel"));
         // One fill + one stroke path per row with data.
-        assert_eq!(svg.matches("<path").count() >= sc.rows.len(), true);
+        assert!(svg.matches("<path").count() >= sc.rows.len());
     }
 
     #[test]

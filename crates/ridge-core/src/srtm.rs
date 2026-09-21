@@ -455,7 +455,7 @@ mod tests {
         let src = SyntheticSource { side: 1201 };
         let t = src.tile(44, -72).unwrap();
         let v = t.elevation(44.5, -71.5);
-        let expected = SyntheticSource::value(44.5, -71.5).round() as f64;
+        let expected = SyntheticSource::value(44.5, -71.5).round();
         assert!((v - expected).abs() < 1e-9);
         assert!(t.elevation(45.5, -71.5).is_nan()); // out of tile
     }
@@ -474,7 +474,6 @@ mod tests {
         zip.extend_from_slice(&(name.len() as u16).to_le_bytes());
         zip.extend_from_slice(&0u16.to_le_bytes());
         zip.extend_from_slice(name);
-        let payload_start = zip.len();
         zip.extend_from_slice(&payload);
         // central directory
         let cd_start = zip.len();

@@ -142,7 +142,7 @@ mod tests {
         assert_eq!(grid.dim(), (4, 5));
         // First row: lat = 43.0 (bottom edge), matching upstream convention.
         let v00 = grid[(0, 0)];
-        let expected = SyntheticSource::value(43.0, -72.0).round() as f64;
+        let expected = SyntheticSource::value(43.0, -72.0).round();
         assert!((v00 - expected).abs() < 1e-9);
         // Last sampled point stops short of the far corner: r/N, not r/(N-1).
         // Compare through the same nearest-neighbor tile lookup (floating
@@ -156,7 +156,7 @@ mod tests {
         // binary-exact fractions of the span).
         let lat = 43.0 + 1.0 / 4.0;
         let lon = -72.0 + 2.0 / 5.0;
-        let expected = SyntheticSource::value(lat, lon).round() as f64;
+        let expected = SyntheticSource::value(lat, lon).round();
         assert!((grid[(1, 2)] - expected).abs() < 1e-9);
     }
 

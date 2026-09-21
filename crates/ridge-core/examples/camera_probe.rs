@@ -13,10 +13,6 @@ fn main() {
     let bbox = ridge_core::DEFAULT_BBOX;
     let (n, p) = (80usize, 300usize);
 
-    // The fixed frame (what layout currently assumes, angle-independent):
-    let frame_bottom = -6.0 * (n as f64 - 1.0);
-    let frame_top = 40.0; // vertical_ratio: normalized max is exactly 1.0
-    let frame_mid = (frame_bottom + frame_top) / 2.0;
     println!("auto-framed orbit: the view window hugs the content at every angle");
     println!();
     println!("angle | frame (data window)      | apparent size of the landscape          |");
@@ -56,17 +52,6 @@ fn main() {
         }
         let mid = (ymin + ymax) / 2.0;
         let _ = mid;
-        // Plane footprint horizontal extent at this angle (corners of the
-        // rotating canvas projected by the oblique map):
-        let (cw, ch) = ((p - 1) as f64 / 2.0, (n - 1) as f64 / 2.0);
-        let th = (deg as f64).to_radians();
-        let (c_, s_) = (th.cos(), th.sin());
-        let xs: Vec<f64> = [(-cw, -ch), (-cw, ch), (cw, -ch), (cw, ch)]
-            .iter()
-            .map(|&(x, z)| c_ * x + s_ * z)
-            .collect();
-        let fx = xs.iter().cloned().fold(f64::MIN, f64::max)
-            - xs.iter().cloned().fold(f64::MAX, f64::min);
         let scene = ridge_core::RidgeScene::from_grid(&processed, bbox.ratio(), 20.0);
         let [_, ytop] = scene.layout.ylim;
         let [xl, xr] = scene.layout.xlim;

@@ -2,7 +2,7 @@
 //! sampling densities and map where masked cells land.
 
 use ndarray::Array2;
-use ridge_core::preprocess::{gradient3x3, percentile_linear};
+use ridge_core::preprocess::percentile_linear;
 use ridge_core::srtm::DirSource;
 
 fn normalize(values: &Array2<f64>) -> (Array2<f64>, Vec<bool>) {
