@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # The golden parity tests must run, not skip.
+  RIDGE_REQUIRE_FIXTURES: "1"
+
+jobs:
+  checks:
+    name: just ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: extractions/setup-just@v4
+      # The SRTM tiles for the golden tests come from a public mirror: fetch
+      # them once and keep them.
+      - name: Cache SRTM fixtures
+        id: fixtures
+        uses: actions/cache@v6
+        with:
+          path: fixtures/srtm
+          key: srtm-${{ hashFiles('scripts/fetch_fixtures.sh') }}
+      - name: Fetch SRTM fixtures
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        run: scripts/fetch_fixtures.sh
+      - run: npm --prefix web ci
+      - run: just ci
+
+  install:
+    name: package, install and run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: extractions/setup-just@v4
+      - name: Cache SRTM fixtures
+        id: fixtures
+        uses: actions/cache@v6
+        with:
+          path: fixtures/srtm
+          key: srtm-${{ hashFiles('scripts/fetch_fixtures.sh') }}
+      - name: Fetch SRTM fixtures
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        run: scripts/fetch_fixtures.sh
+      - run: npm --prefix web ci
+      # Fails if anything the build needs (the embedded frontend, say) isn't
+      # in the published crates.
+      - run: just package
+      # Without web/dist, the build embeds the crate's own copy of the
+      # frontend, as a build from crates.io does.
+      - name: Install with the packaged frontend
+        run: |
+          rm -rf web/dist
+          cargo install --locked --path crates/ridge_redux --root "$RUNNER_TEMP/install"
+      - name: Run it and fetch the page and the API
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/install/bin/ridge_redux" --no-open --addr 127.0.0.1:8420 \
+            --fixture-dir "$GITHUB_WORKSPACE/fixtures/srtm" &
+          for _ in $(seq 30); do curl -sf http://127.0.0.1:8420/healthz && break; sleep 1; done
+          curl -sf http://127.0.0.1:8420/ | grep -q '<title>ridge-redux'
+          curl -sf http://127.0.0.1:8420/api/presets | grep -q 'White Mountains'
+          curl -sf http://127.0.0.1:8420/api/readme | head -1 | grep -q '# ridge-redux'
