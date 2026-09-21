@@ -2,21 +2,76 @@
 
 *Ridgeline plots of ridges — in Rust, in your browser.*
 
-A Rust port of the delightful Python package
-[ridge_map](https://github.com/ColCarroll/ridge_map) ("3D maps with 1D lines"),
-replacing matplotlib with a webapp: a Rust backend owns the entire terrain
-pipeline (SRTM download → sampling → rotation → water/lake masking) and a
-minimal canvas frontend lets you **navigate, rotate and style the landscape**
-into artwork, then export it as vector SVG or PNG.
+> **TL;DR** — [ridge_map](https://github.com/ColCarroll/ridge_map) makes
+> beautiful ridgeline maps. To make these maps, you need to modify a Python script: choose
+> coordinates by hand, re-run for every angle or colour, and get a static
+> matplotlib figure. ridge-redux is the same pipeline in Rust (its sampling
+> is bit-for-bit identical to upstream) behind an interactive web app: draw the
+> area on a map, rotate and restyle instantly, export SVG or PNG. One
+> `cargo install`.
 
 ![White Mountains](examples/white_mountains.png)
 
-## Quick start
+## Install
+
+The only prerequisite is a Rust toolchain ([rustup.rs](https://rustup.rs)).
+
+**From crates.io**
 
 ```bash
-cargo run --release -p ridge-server -- --web-dir web
+cargo install ridge_redux
+ridge_redux
 # open http://127.0.0.1:8420
 ```
+
+**From source**
+
+```bash
+git clone https://github.com/angus-forrest-uk/ridge_redux
+cd ridge_redux
+cargo run --release
+# open http://127.0.0.1:8420
+```
+
+## Why a local server?
+
+ridge-redux runs as a small server on your own machine, and you use it in
+the browser you already have. It isn't a downloadable app or a hosted website,
+on purpose.
+
+**Why not a desktop app?** A double-click app has to be signed to open
+cleanly on each platform. On macOS, an unsigned download is quarantined, and
+recent versions report it as "damaged". Signing and notarisation need a paid
+Apple Developer account. On Windows, an unsigned installer gets a SmartScreen
+warning unless it's signed with a code-signing certificate. On Linux, a webview
+app depends on the distro's system libraries. That's recurring cost and upkeep
+for a hobby project. `cargo install` compiles on your own machine, so nothing
+needs signing, and every platform Rust supports works the same way.
+
+**Why not a website?**
+
+- **Data volume.** Every new area needs whole SRTM elevation tiles. An SRTM1
+  tile covers 1°×1° and is about 26 MB unpacked, and one view often spans 2–4
+  of them. A public site would have to fetch, store and serve that for every
+  visitor's area, which means real storage and bandwidth bills.
+- **The upstream mirrors.** The tiles come from free community mirrors
+  (kurviger by default). A local user fetches each tile once and keeps it. A
+  public service sending every visitor through those mirrors would be abusing
+  a free resource, and would soon hit rate limits.
+- **Compute.** The server samples the elevation grid again on every change of
+  location or resolution. That's cheap on your CPU. A hosted service would pay
+  for it on every request, from every visitor.
+- **Caching is personal.** Your cache (`~/.cache/ridge-redux/srtm/`) only
+  holds the places *you* look at. A shared cache has to hold everyone's
+  places, which brings back the cost problem.
+- **Nothing to keep running.** A local tool costs nothing while nobody is
+  using it, and there's no service to keep up or protect from abuse.
+
+**Security.** The server has no authentication or rate limiting, and it binds
+to `127.0.0.1` by default. Don't expose it on an untrusted network with
+`--addr 0.0.0.0`.
+
+## Using it
 
 On first use the server downloads SRTM elevation tiles on demand and caches
 them under `~/.cache/ridge-redux/srtm/` (one fetch per tile, ever).
@@ -112,6 +167,11 @@ via wasm-bindgen and drop in.
 
 ## API
 
+`POST /api/elevation` — the call the frontend makes. It takes
+`{ bbox, num_lines, elevation_pts, region: "rect" | "disc", span_deg }` and returns
+the raw sampled grid as `{ shape, values, window }`: whole metres, with `null` for
+voids. Rotation, masking and drawing then happen in the browser.
+
 `POST /api/preview` — body is a JSON `RenderParams` (all fields optional,
 see [`crates/ridge-server/src/api.rs`](crates/ridge-server/src/api.rs)):
 
@@ -172,12 +232,25 @@ mismatches**, i.e. bit-for-bit identical sampling to Python + srtm.py.
 
 ## Development
 
+Development tasks are [`just`](https://github.com/casey/just) recipes
+(`cargo install just`, or your package manager). Run `just` to list them.
+
 ```bash
-cargo test --release              # 37 tests: units + API integration + parity
-node scripts/test_frontend.mjs    # frontend logic against a stubbed DOM
-node scripts/parity_frontend.mjs  # JS pipeline == Rust pipeline (bit-for-bit)
-scripts/fetch_fixtures.sh         # fetch tiles for the golden parity test
-cargo run -p ridge-core --example debug_tile     # connectivity diagnostics
+just run          # app on localhost, serving web/ from disk (edits show on reload)
+just offline      # same, against the fixture tiles, with no network
+just test         # 43 Rust tests: 31 unit (incl. golden parity) + 12 API
+just test-web     # frontend logic + JS pipeline == Rust pipeline (bit-for-bit)
+just fixtures     # fetch the SRTM tiles for the golden parity test
+just fmt          # cargo fmt
+just clippy       # clippy, warnings are errors
+just ci           # everything CI runs: fmt-check, clippy, test, test-web
+just render --bbox "..." --out out.svg   # headless SVG render
+```
+
+Diagnostics that aren't recipes:
+
+```bash
+cargo run -p ridge-core --example debug_tile          # connectivity diagnostics
 cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity check
 ```
 
@@ -191,8 +264,8 @@ cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity c
 
 ## License
 
-MIT, like upstream ridge_map (see `LICENSE-upstream` for the original
-project's license text).
+MIT — see [`LICENSE`](LICENSE). ridge-redux is a port of ridge_map, which
+is also MIT. Its copyright notice is kept in [`LICENSE-upstream`](LICENSE-upstream).
 
 Elevation data: NASA [Shuttle Radar Topography Mission](https://www2.jpl.nasa.gov/srtm/),
 available between 60°N and 60°S.
