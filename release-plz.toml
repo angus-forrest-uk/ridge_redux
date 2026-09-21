@@ -8,16 +8,15 @@ release_always = false
 # The built frontend is copied into crates/ridge_redux/dist (gitignored) just
 # before publishing, and cargo counts that as uncommitted changes.
 publish_allow_dirty = true
-# One changelog, one tag and one GitHub Release, all for the app (below).
-changelog_update = false
+# One tag and one GitHub Release, for the app (below). Each crate keeps its
+# own changelog: the root one for ridge_redux, crates/ridge-core/CHANGELOG.md
+# for the library.
 git_tag_enable = false
 git_release_enable = false
 
 [[package]]
 name = "ridge_redux"
-changelog_update = true
 changelog_path = "./CHANGELOG.md"
-changelog_include = ["ridge-core"]
 git_tag_enable = true
 git_release_enable = true
 version_group = "ridge"
