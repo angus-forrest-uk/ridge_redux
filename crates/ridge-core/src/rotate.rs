@@ -47,17 +47,22 @@ fn output_shape(shape: (usize, usize), angle_deg: f64, reshape: bool) -> (usize,
     // M @ the four corners (0,0), (0,ncols), (nrows,0), (nrows,ncols).
     let mut rs = [0.0f64; 4];
     let mut cs = [0.0f64; 4];
-    for (k, (r, col)) in [(0.0, 0.0), (0.0, ncols as f64), (nrows as f64, 0.0), (nrows as f64, ncols as f64)]
-        .into_iter()
-        .enumerate()
+    for (k, (r, col)) in [
+        (0.0, 0.0),
+        (0.0, ncols as f64),
+        (nrows as f64, 0.0),
+        (nrows as f64, ncols as f64),
+    ]
+    .into_iter()
+    .enumerate()
     {
         rs[k] = c * r + s * col;
         cs[k] = -s * r + c * col;
     }
-    let ptp_r = rs.iter().cloned().fold(f64::MIN, f64::max)
-        - rs.iter().cloned().fold(f64::MAX, f64::min);
-    let ptp_c = cs.iter().cloned().fold(f64::MIN, f64::max)
-        - cs.iter().cloned().fold(f64::MAX, f64::min);
+    let ptp_r =
+        rs.iter().cloned().fold(f64::MIN, f64::max) - rs.iter().cloned().fold(f64::MAX, f64::min);
+    let ptp_c =
+        cs.iter().cloned().fold(f64::MIN, f64::max) - cs.iter().cloned().fold(f64::MAX, f64::min);
     // (ptp + 0.5).astype(int): numpy casts truncate toward zero; values are positive.
     ((ptp_r + 0.5) as usize, (ptp_c + 0.5) as usize)
 }
@@ -166,7 +171,10 @@ mod fixed_plane_tests {
         // 90-degree turn about the center, same convention as scipy:
         // out[i, j] == a[j, n-1-i]. All samples land on grid nodes.
         let out = rotate_fixed_plane(&a, 90.0, 0);
-        assert_eq!(out, array![[3.0, 6.0, 9.0], [2.0, 5.0, 8.0], [1.0, 4.0, 7.0]]);
+        assert_eq!(
+            out,
+            array![[3.0, 6.0, 9.0], [2.0, 5.0, 8.0], [1.0, 4.0, 7.0]]
+        );
         assert!(out.iter().all(|v| v.is_finite()));
     }
 
@@ -174,7 +182,11 @@ mod fixed_plane_tests {
     fn off_grid_angles_leave_corner_gaps() {
         // Big enough that the corners genuinely fall outside at 45 degrees.
         let mut a = Array2::from_elem((8, 8), 0.0);
-        for r in 0..8 { for c in 0..8 { a[(r, c)] = (r * 8 + c) as f64; } }
+        for r in 0..8 {
+            for c in 0..8 {
+                a[(r, c)] = (r * 8 + c) as f64;
+            }
+        }
         let out = rotate_fixed_plane(&a, 45.0, 0);
         assert_eq!(out.dim(), (8, 8));
         assert!(out[[0, 0]].is_nan(), "corner becomes a gap, not zero");
@@ -216,10 +228,7 @@ mod tests {
         let a = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
         let out = rotate(&a, 90.0, true, 0);
         assert_eq!(out.dim(), (3, 2));
-        assert_eq!(
-            out,
-            array![[3.0, 6.0], [2.0, 5.0], [1.0, 4.0]]
-        );
+        assert_eq!(out, array![[3.0, 6.0], [2.0, 5.0], [1.0, 4.0]]);
     }
 
     #[test]

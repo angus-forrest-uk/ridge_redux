@@ -15,7 +15,9 @@ fn hex3(c: Rgb) -> String {
 }
 
 fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Upstream `label_verticalalignment`.
@@ -102,7 +104,9 @@ impl LineColorSpec {
 pub fn render_svg(scene: &RidgeScene, style: &PlotStyle) -> String {
     let layout = &scene.layout;
     let line = style.line.to_line();
-    let lw_px = style.linewidth_pt / 72.0 * FIG_DPI * (layout.width_px / (style.size_scale * FIG_DPI)).max(1e-9);
+    let lw_px = style.linewidth_pt / 72.0
+        * FIG_DPI
+        * (layout.width_px / (style.size_scale * FIG_DPI)).max(1e-9);
     // ^ linewidth scales with the figure just like matplotlib points do.
 
     let mut s = String::with_capacity(1 << 20);
@@ -116,7 +120,12 @@ pub fn render_svg(scene: &RidgeScene, style: &PlotStyle) -> String {
 
     // Background.
     let bg = hex3(style.background);
-    let _ = writeln!(s, r#"  <rect x="0" y="0" width="{w}" height="{h}" fill="{bg}" />"#, w = layout.width_px, h = layout.height_px);
+    let _ = writeln!(
+        s,
+        r#"  <rect x="0" y="0" width="{w}" height="{h}" fill="{bg}" />"#,
+        w = layout.width_px,
+        h = layout.height_px
+    );
 
     // Clip everything to the axes rect (matplotlib clips to the axes).
     let _ = writeln!(
@@ -151,7 +160,10 @@ pub fn render_svg(scene: &RidgeScene, style: &PlotStyle) -> String {
             })
             .collect::<Vec<_>>()
             .join(" ");
-        let _ = writeln!(s, r#"    <path d="{fill_path}" fill="{bg}" stroke="none" />"#);
+        let _ = writeln!(
+            s,
+            r#"    <path d="{fill_path}" fill="{bg}" stroke="none" />"#
+        );
 
         // Strokes.
         match (style.kind, &line) {
@@ -221,10 +233,7 @@ pub fn render_svg(scene: &RidgeScene, style: &PlotStyle) -> String {
     s
 }
 
-fn text_block(
-    text: &str,
-    fs: f64,
-) -> (Vec<String>, f64, f64) {
+fn text_block(text: &str, fs: f64) -> (Vec<String>, f64, f64) {
     // (lines, width_px, height_px) with a chunky estimate for Cinzel-like fonts.
     let lines: Vec<String> = text.split('\n').map(|l| l.to_string()).collect();
     let maxlen = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0) as f64;
@@ -370,7 +379,9 @@ mod tests {
     fn svg_elevation_kind() {
         let sc = scene();
         let style = PlotStyle {
-            line: LineColorSpec::Map { name: crate::colormap::Colormap::Ocean },
+            line: LineColorSpec::Map {
+                name: crate::colormap::Colormap::Ocean,
+            },
             kind: ColorKind::Elevation,
             background: [236, 232, 236],
             linewidth_pt: 2.0,

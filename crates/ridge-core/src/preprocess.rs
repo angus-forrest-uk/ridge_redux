@@ -72,12 +72,7 @@ const MIN_LAKE_COMPONENT: usize = 12;
 /// neighborhood keeps only in-bounds, non-excluded samples, and a cell with
 /// no valid neighbors gets 0 (flat). Mirrors skimage's masked rank filters
 /// (`is_in_mask`), which upstream never used.
-pub fn masked_gradient3x3(
-    img: &[f64],
-    excluded: &[bool],
-    nrows: usize,
-    ncols: usize,
-) -> Vec<f32> {
+pub fn masked_gradient3x3(img: &[f64], excluded: &[bool], nrows: usize, ncols: usize) -> Vec<f32> {
     let mut out = vec![0f32; nrows * ncols];
     for r in 0..nrows {
         for c in 0..ncols {
@@ -108,12 +103,7 @@ pub fn masked_gradient3x3(
 
 /// Keep only connected components (4-connectivity) of `mask` with at least
 /// `min_size` cells; everything else is dropped. Returns the filtered mask.
-fn keep_large_components(
-    mask: &[bool],
-    nrows: usize,
-    ncols: usize,
-    min_size: usize,
-) -> Vec<bool> {
+fn keep_large_components(mask: &[bool], nrows: usize, ncols: usize, min_size: usize) -> Vec<bool> {
     let mut out = vec![false; nrows * ncols];
     let mut visited = vec![false; nrows * ncols];
     let mut stack: Vec<usize> = Vec::new();
@@ -384,7 +374,10 @@ mod tests {
         }
         for r in 28..30 {
             for c in 13..20 {
-                assert!(out[(r, c)].is_nan(), "bench cell ({r},{c}) should be masked");
+                assert!(
+                    out[(r, c)].is_nan(),
+                    "bench cell ({r},{c}) should be masked"
+                );
             }
         }
         // The slope must be hole-free (no rounding speckle), and the

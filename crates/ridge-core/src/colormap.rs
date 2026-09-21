@@ -20,7 +20,6 @@ pub fn hex_checked(hexstr: &str) -> Option<Rgb> {
     Some([(v >> 16) as u8, (v >> 8) as u8, v as u8])
 }
 
-
 #[inline]
 fn clamped(v: f64) -> f64 {
     v.clamp(0.0, 1.0)
@@ -92,7 +91,7 @@ impl Colormap {
             Colormap::Plasma => conv(colorous::PLASMA.eval_continuous(t)),
             Colormap::Cividis => conv(colorous::CIVIDIS.eval_continuous(t)),
             // matplotlib formulas
-            Colormap::Spring => [f(1.0), f(t), f(1.0 - t)],           // (1, t, 1-t)
+            Colormap::Spring => [f(1.0), f(t), f(1.0 - t)], // (1, t, 1-t)
             Colormap::Summer => [f(t), f(1.0 - 0.5 * t), f(0.4 * t)], // (t, 1-0.5t, 0.4t)
             Colormap::Autumn => [f(1.0), f(t), f(0.0)],
             Colormap::Winter => [f(0.0), f(t), f(1.0 - 0.5 * t)],
@@ -121,7 +120,11 @@ impl Colormap {
             Colormap::Gnuplot => {
                 // red = gfunc[7] = sqrt(x), green = gfunc[5] = x^3,
                 // blue = gfunc[15] = sin(2 pi x)
-                [f(t.sqrt()), f(t * t * t), f((t * 2.0 * std::f64::consts::PI).sin())]
+                [
+                    f(t.sqrt()),
+                    f(t * t * t),
+                    f((t * 2.0 * std::f64::consts::PI).sin()),
+                ]
             }
         }
     }
@@ -215,9 +218,15 @@ mod tests {
 
     #[test]
     fn parse_names() {
-        assert_eq!(LineColor::parse("viridis"), Some(LineColor::Map(Colormap::Viridis)));
+        assert_eq!(
+            LineColor::parse("viridis"),
+            Some(LineColor::Map(Colormap::Viridis))
+        );
         assert_eq!(LineColor::parse("black"), Some(LineColor::Solid([0, 0, 0])));
-        assert_eq!(LineColor::parse("#0f0f0f"), Some(LineColor::Solid([15, 15, 15])));
+        assert_eq!(
+            LineColor::parse("#0f0f0f"),
+            Some(LineColor::Solid([15, 15, 15]))
+        );
         assert_eq!(LineColor::parse("not-a-color"), None);
     }
 }

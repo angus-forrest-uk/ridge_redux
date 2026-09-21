@@ -31,7 +31,10 @@ fn count_masks_gated(values: &Array2<f64>, lake_flatness: i32) -> (usize, usize,
     let mut sorted = v.iter().cloned().collect::<Vec<f64>>();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let water_level = percentile_linear(&sorted, 10.0);
-    let img: Vec<u8> = v.iter().map(|x| ((x * 255.0).round().clamp(0.0, 255.0)) as u8).collect();
+    let img: Vec<u8> = v
+        .iter()
+        .map(|x| ((x * 255.0).round().clamp(0.0, 255.0)) as u8)
+        .collect();
     let g3 = ridge_core::preprocess::morphological_gradient(&img, nrows, ncols, 1);
     let g5 = ridge_core::preprocess::morphological_gradient(&img, nrows, ncols, 2);
     let mut water = 0;
@@ -119,7 +122,10 @@ fn main() {
     let mut sorted = v.iter().cloned().collect::<Vec<f64>>();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let water_level = percentile_linear(&sorted, 10.0);
-    let img: Vec<u8> = v.iter().map(|x| ((x * 255.0).round().clamp(0.0, 255.0)) as u8).collect();
+    let img: Vec<u8> = v
+        .iter()
+        .map(|x| ((x * 255.0).round().clamp(0.0, 255.0)) as u8)
+        .collect();
     let grad = ridge_core::preprocess::gradient3x3(&img, n, p);
     println!();
     println!("lake-only mask at lake_flatness=3 (219x300), 1 char = 9x9 cells:");
@@ -135,7 +141,13 @@ fn main() {
                     }
                 }
             }
-            line.push(if m == 0 { '.' } else if m < 20 { '+' } else { '#' });
+            line.push(if m == 0 {
+                '.'
+            } else if m < 20 {
+                '+'
+            } else {
+                '#'
+            });
         }
         println!("{line}");
     }

@@ -25,7 +25,9 @@ struct GridCacheInner {
 
 impl Clone for GridCache {
     fn clone(&self) -> Self {
-        GridCache { inner: self.inner.clone() }
+        GridCache {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -88,7 +90,7 @@ impl AppState {
             Arc::new(DirSource::new(dir))
         } else {
             let bases: Vec<&str> = config.srtm_base.split(',').map(str::trim).collect();
-                    match RemoteSource::new(&bases, &config.cache_dir) {
+            match RemoteSource::new(&bases, &config.cache_dir) {
                 Ok(src) => {
                     tracing::info!(
                         "SRTM mirror: {} (cache: {})",
@@ -103,6 +105,9 @@ impl AppState {
                 }
             }
         };
-        AppState { source, grid_cache: GridCache::new() }
+        AppState {
+            source,
+            grid_cache: GridCache::new(),
+        }
     }
 }

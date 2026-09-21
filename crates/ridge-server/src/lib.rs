@@ -40,7 +40,8 @@ impl ServerConfig {
     pub fn from_env_and_args() -> ServerConfig {
         let mut addr = SocketAddr::from(([127, 0, 0, 1], 8420));
         let mut web_dir = PathBuf::from("web/dist");
-        let mut srtm_base = "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".to_string();
+        let mut srtm_base =
+            "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".to_string();
         let mut cache_dir = default_cache_dir();
         let mut fixture_dir = None;
 
@@ -66,7 +67,13 @@ impl ServerConfig {
                 }
             }
         }
-        ServerConfig { addr, web_dir, srtm_base, cache_dir, fixture_dir }
+        ServerConfig {
+            addr,
+            web_dir,
+            srtm_base,
+            cache_dir,
+            fixture_dir,
+        }
     }
 }
 
@@ -84,7 +91,11 @@ pub async fn run() {
     let app = build_router(state, &config);
 
     let cfg = config.clone();
-    tracing::info!("ridge-server listening on http://{} (web dir: {})", cfg.addr, cfg.web_dir.display());
+    tracing::info!(
+        "ridge-server listening on http://{} (web dir: {})",
+        cfg.addr,
+        cfg.web_dir.display()
+    );
 
     let listener = tokio::net::TcpListener::bind(cfg.addr)
         .await

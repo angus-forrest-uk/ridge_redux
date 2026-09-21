@@ -87,7 +87,12 @@ fn d_annotation_dot() -> f64 {
 impl Default for RenderParams {
     fn default() -> Self {
         RenderParams {
-            bbox: [DEFAULT_BBOX.lon0, DEFAULT_BBOX.lat0, DEFAULT_BBOX.lon1, DEFAULT_BBOX.lat1],
+            bbox: [
+                DEFAULT_BBOX.lon0,
+                DEFAULT_BBOX.lat0,
+                DEFAULT_BBOX.lon1,
+                DEFAULT_BBOX.lat1,
+            ],
             num_lines: 80,
             elevation_pts: 300,
             viewpoint_angle: 0.0,
@@ -125,7 +130,9 @@ impl RenderParams {
         match self.kind.as_str() {
             "gradient" => Ok(ColorKind::Gradient),
             "elevation" => Ok(ColorKind::Elevation),
-            other => Err(ApiError::bad_request(format!("kind must be gradient|elevation, got {other:?}"))),
+            other => Err(ApiError::bad_request(format!(
+                "kind must be gradient|elevation, got {other:?}"
+            ))),
         }
     }
 
@@ -150,10 +157,15 @@ impl RenderParams {
     fn underlying_n(&self) -> usize {
         let b = self.bbox_struct();
         let dlon = (b.lon1 - b.lon0).abs();
-        let step = if dlon > 0.0 { dlon / self.elevation_pts as f64 } else { self.span() };
+        let step = if dlon > 0.0 {
+            dlon / self.elevation_pts as f64
+        } else {
+            self.span()
+        };
         let n = (self.span() / step).ceil() as usize;
-        let diag_cells =
-            ((self.num_lines.pow(2) + self.elevation_pts.pow(2)) as f64).sqrt().ceil() as usize;
+        let diag_cells = ((self.num_lines.pow(2) + self.elevation_pts.pow(2)) as f64)
+            .sqrt()
+            .ceil() as usize;
         let cap = if self.is_disc() { 4000 } else { diag_cells + 2 };
         n.clamp(self.num_lines.max(self.elevation_pts).min(cap), cap.max(1))
     }
@@ -186,7 +198,10 @@ impl RenderParams {
 
     fn background(&self) -> Result<[u8; 3], ApiError> {
         hex_checked(&self.background_color).ok_or_else(|| {
-            ApiError::bad_request(format!("background_color must be hex, got {:?}", self.background_color))
+            ApiError::bad_request(format!(
+                "background_color must be hex, got {:?}",
+                self.background_color
+            ))
         })
     }
 
@@ -245,16 +260,26 @@ pub struct ApiError {
 
 impl ApiError {
     fn bad_request(message: impl Into<String>) -> Self {
-        ApiError { status: StatusCode::BAD_REQUEST, message: message.into() }
+        ApiError {
+            status: StatusCode::BAD_REQUEST,
+            message: message.into(),
+        }
     }
     fn internal(message: impl Into<String>) -> Self {
-        ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: message.into() }
+        ApiError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: message.into(),
+        }
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(serde_json::json!({ "error": self.message }))).into_response()
+        (
+            self.status,
+            Json(serde_json::json!({ "error": self.message })),
+        )
+            .into_response()
     }
 }
 
@@ -344,7 +369,7 @@ fn preprocess_and_scene(
         params.water_ntile,
         params.lake_flatness,
         params.vertical_ratio,
-        1.0, // reshape path: upstream-faithful naive threshold
+        1.0,  // reshape path: upstream-faithful naive threshold
         None, // stats over the whole window
     )
     .map_err(|e| ApiError::bad_request(format!("preprocess failed: {e}")))?;
@@ -358,7 +383,9 @@ fn preprocess_and_scene(
         params.bbox_struct().ratio()
     };
     Ok(ridge_core::RidgeScene::from_grid(
-        &processed, ratio, params.size_scale,
+        &processed,
+        ratio,
+        params.size_scale,
     ))
 }
 
@@ -418,8 +445,7 @@ async fn render_scene(
                     // so the disc-space decision measures the same terrain
                     // slope and matches upstream's composition.
                     let d_step = p.span() / p.underlying_n() as f64;
-                    let ref_step =
-                        (bbox.lat1 - bbox.lat0).abs() / p.num_lines as f64;
+                    let ref_step = (bbox.lat1 - bbox.lat0).abs() / p.num_lines as f64;
                     // Statistics (normalization + water percentile) over the
                     // original bbox footprint when viewing through the rect
                     // window: matches upstream's window-scoped percentile,
@@ -432,11 +458,9 @@ async fn render_scene(
                         let c_lon = (bbox.lon0 + bbox.lon1) / 2.0;
                         let mut m = vec![false; raw.len()];
                         for r in 0..n {
-                            let lat = c_lat - span / 2.0
-                                + r as f64 / n as f64 * span;
+                            let lat = c_lat - span / 2.0 + r as f64 / n as f64 * span;
                             for c in 0..n {
-                                let lon = c_lon - span / 2.0
-                                    + c as f64 / n as f64 * span;
+                                let lon = c_lon - span / 2.0 + c as f64 / n as f64 * span;
                                 if lat >= bbox.lat0
                                     && lat <= bbox.lat1
                                     && lon >= bbox.lon0
@@ -515,32 +539,29 @@ async fn render_scene(
         let grid = match state.grid_cache.get(key) {
             Some(g) => g,
             None => {
-                let grid = tokio::task::spawn_blocking(move || -> Result<
-                    ndarray::Array2<f64>,
-                    String,
-                > {
-                    let bbox = p.bbox_struct();
-                    let (mut lines, mut pts) = (p.num_lines, p.elevation_pts);
-                    if !p.lock_resolution
-                        && ridge_core::grid::swap_for_angle(p.viewpoint_angle)
-                    {
-                        std::mem::swap(&mut lines, &mut pts);
-                    }
-                    let mut values =
-                        ridge_core::grid::sample(source.as_ref(), &bbox, lines, pts);
-                    if p.viewpoint_angle.rem_euclid(360.0) != 0.0 {
-                        values = ridge_core::rotate::rotate(
-                            &values,
-                            p.viewpoint_angle,
-                            !p.crop,
-                            p.interpolation,
-                        );
-                    }
-                    Ok(values)
-                })
-                .await
-                .map_err(|e| ApiError::internal(format!("join error: {e}")))?
-                .map_err(ApiError::internal)?;
+                let grid =
+                    tokio::task::spawn_blocking(move || -> Result<ndarray::Array2<f64>, String> {
+                        let bbox = p.bbox_struct();
+                        let (mut lines, mut pts) = (p.num_lines, p.elevation_pts);
+                        if !p.lock_resolution && ridge_core::grid::swap_for_angle(p.viewpoint_angle)
+                        {
+                            std::mem::swap(&mut lines, &mut pts);
+                        }
+                        let mut values =
+                            ridge_core::grid::sample(source.as_ref(), &bbox, lines, pts);
+                        if p.viewpoint_angle.rem_euclid(360.0) != 0.0 {
+                            values = ridge_core::rotate::rotate(
+                                &values,
+                                p.viewpoint_angle,
+                                !p.crop,
+                                p.interpolation,
+                            );
+                        }
+                        Ok(values)
+                    })
+                    .await
+                    .map_err(|e| ApiError::internal(format!("join error: {e}")))?
+                    .map_err(ApiError::internal)?;
                 let grid = Arc::new(grid);
                 state.grid_cache.insert(key, grid.clone());
                 grid
@@ -604,7 +625,10 @@ pub async fn export_svg(
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, "image/svg+xml; charset=utf-8".to_string()),
+            (
+                header::CONTENT_TYPE,
+                "image/svg+xml; charset=utf-8".to_string(),
+            ),
             (
                 header::CONTENT_DISPOSITION,
                 "attachment; filename=\"ridge-map.svg\"".to_string(),
@@ -687,10 +711,15 @@ impl ElevationParams {
     fn underlying_n(&self) -> usize {
         let b = self.bbox_struct();
         let dlon = (b.lon1 - b.lon0).abs();
-        let step = if dlon > 0.0 { dlon / self.elevation_pts as f64 } else { self.span() };
+        let step = if dlon > 0.0 {
+            dlon / self.elevation_pts as f64
+        } else {
+            self.span()
+        };
         let n = (self.span() / step).ceil() as usize;
-        let diag_cells =
-            ((self.num_lines.pow(2) + self.elevation_pts.pow(2)) as f64).sqrt().ceil() as usize;
+        let diag_cells = ((self.num_lines.pow(2) + self.elevation_pts.pow(2)) as f64)
+            .sqrt()
+            .ceil() as usize;
         let cap = if self.is_disc() { 4000 } else { diag_cells + 2 };
         n.clamp(self.num_lines.max(self.elevation_pts).min(cap), cap.max(1))
     }
@@ -824,11 +853,13 @@ const README: &str = include_str!("../../../README.md");
 
 /// `GET /api/readme` — the README as plain text, for the in-app modal.
 pub async fn readme() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], README)
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        README,
+    )
 }
 
 pub async fn healthz(State(state): State<AppState>) -> Json<serde_json::Value> {
     let (hits, misses) = state.grid_cache.stats();
     Json(serde_json::json!({ "ok": true, "grid_cache": { "hits": hits, "misses": misses } }))
 }
-

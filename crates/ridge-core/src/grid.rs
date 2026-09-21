@@ -192,7 +192,10 @@ mod tests {
         let finite = grid.iter().filter(|v| v.is_finite()).count();
         // Disc covers pi/4 of the square (plus boundary-rounding slack).
         let expected = (std::f64::consts::FRAC_PI_4 * 1600.0) as usize;
-        assert!((finite as i64 - expected as i64).abs() < 40, "finite {finite} vs {expected}");
+        assert!(
+            (finite as i64 - expected as i64).abs() < 40,
+            "finite {finite} vs {expected}"
+        );
         // Outside the disc: strictly NaN.
         for r in 0..40 {
             for c in 0..40 {
@@ -222,8 +225,7 @@ mod tests {
         // Window = the lower-left 4x8-degree... anisotropic: lat 43.5..44.3
         // (4 rows over 0.8), lon -72.5..-71.7 (8 cols over 0.8).
         let out = sample_window(
-            &data, d_lat0, d_lon0, d_span,
-            43.5, -72.5, 44.3, -71.7, 4, 8,
+            &data, d_lat0, d_lon0, d_span, 43.5, -72.5, 44.3, -71.7, 4, 8,
         );
         assert_eq!(out.dim(), (4, 8));
         // Sample positions: lat_i = 43.5 + i/4*0.8 -> rows round((lat-43.5)/0.125)
@@ -231,7 +233,16 @@ mod tests {
         // cols j -> col j exactly.
         // Window col j -> data col round(j * 0.8 / 0.125) (window steps are
         // finer than data steps here: 0.1 vs 0.125 degrees).
-        for (j, expected_col) in [(0usize, 0usize), (1, 1), (2, 2), (3, 2), (4, 3), (5, 4), (6, 5), (7, 6)] {
+        for (j, expected_col) in [
+            (0usize, 0usize),
+            (1, 1),
+            (2, 2),
+            (3, 2),
+            (4, 3),
+            (5, 4),
+            (6, 5),
+            (7, 6),
+        ] {
             assert_eq!(out[(0, j)], (expected_col) as f64, "row 0 col {j}");
         }
         // Rows: window row i -> data row round(i * 0.2 / 0.125).
@@ -304,9 +315,6 @@ mod parity_tests {
             "parity: {mismatches}/{} mismatches (worst delta {worst:.2e})",
             expected.len()
         );
-        assert!(
-            frac < 0.01,
-            "{mismatches} mismatches (worst delta {worst})"
-        );
+        assert!(frac < 0.01, "{mismatches} mismatches (worst delta {worst})");
     }
 }

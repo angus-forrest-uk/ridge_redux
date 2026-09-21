@@ -38,7 +38,12 @@ pub struct Bbox {
 
 impl Bbox {
     pub fn new(lon0: f64, lat0: f64, lon1: f64, lat1: f64) -> Self {
-        Self { lon0, lat0, lon1, lat1 }
+        Self {
+            lon0,
+            lat0,
+            lon1,
+            lat1,
+        }
     }
 
     /// Bottom and top latitude (upstream `lats` property).

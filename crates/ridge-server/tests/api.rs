@@ -14,7 +14,11 @@ fn web_dir() -> std::path::PathBuf {
     DIR.get_or_init(|| {
         let dir = std::env::temp_dir().join("ridge-test-web");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("index.html"), "<!doctype html><title>ridge-redux</title>").unwrap();
+        std::fs::write(
+            dir.join("index.html"),
+            "<!doctype html><title>ridge-redux</title>",
+        )
+        .unwrap();
         dir
     })
     .clone()
@@ -37,7 +41,11 @@ fn app_with_fresh_state() -> axum::Router {
     build_router(state.clone(), &config)
 }
 
-async fn post(app: axum::Router, uri: &str, body: String) -> (StatusCode, axum::response::Response) {
+async fn post(
+    app: axum::Router,
+    uri: &str,
+    body: String,
+) -> (StatusCode, axum::response::Response) {
     let resp = app
         .oneshot(
             Request::builder()
@@ -64,7 +72,12 @@ async fn body_bytes(resp: axum::response::Response) -> Vec<u8> {
 async fn healthz_ok() {
     let app = app_with_fresh_state();
     let resp = app
-        .oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/healthz")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -74,7 +87,12 @@ async fn healthz_ok() {
 async fn readme_is_plain_text() {
     let app = app_with_fresh_state();
     let resp = app
-        .oneshot(Request::builder().uri("/api/readme").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/readme")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -93,8 +111,7 @@ async fn preview_returns_geometry() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let body: serde_json::Value =
-        serde_json::from_slice(&body_bytes(resp).await).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
     assert_eq!(body["shape"], json!([20, 40]));
     assert_eq!(body["rows"].as_array().unwrap().len(), 20);
     assert!(body["vmin"].as_f64().unwrap() < body["vmax"].as_f64().unwrap());
@@ -102,7 +119,10 @@ async fn preview_returns_geometry() {
     assert_eq!(body["rows"][5]["baseline"], json!(-30.0));
     assert!(body["layout"]["width_px"].as_f64().unwrap() > 0.0);
     // Style resolution echoes a solid line color as an RGB array.
-    assert_eq!(body["style"]["line"], json!({"type": "solid", "rgb": [0, 0, 0]}));
+    assert_eq!(
+        body["style"]["line"],
+        json!({"type": "solid", "rgb": [0, 0, 0]})
+    );
 }
 
 #[tokio::test]
@@ -116,7 +136,11 @@ async fn repeat_preview_hits_grid_cache() {
         assert_eq!(status, StatusCode::OK);
     }
     let (hits, misses) = state.grid_cache.stats();
-    assert_eq!((hits, misses), (1, 1), "second identical request should hit the cache");
+    assert_eq!(
+        (hits, misses),
+        (1, 1),
+        "second identical request should hit the cache"
+    );
 }
 
 #[tokio::test]
@@ -138,7 +162,12 @@ async fn export_svg_content_type() {
         headers.get("content-type").unwrap(),
         "image/svg+xml; charset=utf-8"
     );
-    assert!(headers.get("content-disposition").unwrap().to_str().unwrap().contains("ridge-map.svg"));
+    assert!(headers
+        .get("content-disposition")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .contains("ridge-map.svg"));
 }
 
 #[tokio::test]
@@ -166,7 +195,10 @@ async fn ocean_bbox_friendly_error() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let body: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
-    assert!(body["error"].as_str().unwrap().contains("no elevation data"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("no elevation data"));
 }
 
 #[tokio::test]
@@ -204,7 +236,9 @@ async fn elevation_endpoint_is_angle_free_and_raw() {
     }
     // Some finite data must exist inside the White Mountains bbox.
     let any_finite = body["values"]
-        .as_array().unwrap().iter()
+        .as_array()
+        .unwrap()
+        .iter()
         .any(|row| row.as_array().unwrap().iter().any(|v| v.is_i64()));
     assert!(any_finite, "fixture bbox should contain elevations");
 }
@@ -227,10 +261,17 @@ async fn plane_export_keeps_dims_and_makes_corner_gaps() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let body: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
-    assert_eq!(body["shape"], json!([40, 40]), "plane fit: no axis swap, fixed dims");
+    assert_eq!(
+        body["shape"],
+        json!([40, 40]),
+        "plane fit: no axis swap, fixed dims"
+    );
     let first_row_gaps = body["rows"][0]["y"]
-        .as_array().unwrap().iter()
-        .filter(|v| v.is_null()).count();
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v.is_null())
+        .count();
     assert!(first_row_gaps > 0, "45-degree corners must be gaps");
 }
 
@@ -252,7 +293,11 @@ async fn reshape_export_swaps_axes_at_90() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let body: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
-    assert_eq!(body["shape"], json!([30, 50]), "reshape fit: swap + 90-degree rotation cancel");
+    assert_eq!(
+        body["shape"],
+        json!([30, 50]),
+        "reshape fit: swap + 90-degree rotation cancel"
+    );
 }
 
 #[tokio::test]
@@ -277,7 +322,9 @@ async fn disc_region_has_constant_visible_points_at_any_angle() {
         let shape = body["shape"].as_array().unwrap();
         assert_eq!(shape[0], shape[1], "disc grids are square");
         body["rows"]
-            .as_array().unwrap().iter()
+            .as_array()
+            .unwrap()
+            .iter()
             .flat_map(|r| r["y"].as_array().unwrap())
             .filter(|v| v.is_number())
             .count()
@@ -322,11 +369,17 @@ async fn rect_view_keeps_shape_style_and_points_at_any_angle() {
         let body: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
         let shape = body["shape"].as_array().unwrap();
         let count = body["rows"]
-            .as_array().unwrap().iter()
+            .as_array()
+            .unwrap()
+            .iter()
             .flat_map(|r| r["y"].as_array().unwrap())
             .filter(|v| v.is_number())
             .count();
-        (shape[0].as_u64().unwrap() as usize, shape[1].as_u64().unwrap() as usize, count)
+        (
+            shape[0].as_u64().unwrap() as usize,
+            shape[1].as_u64().unwrap() as usize,
+            count,
+        )
     }
     let (r0, c0, n0) = render_at(0).await;
     let (r45, c45, n45) = render_at(45).await;

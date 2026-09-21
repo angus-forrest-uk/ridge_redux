@@ -152,9 +152,15 @@ impl RidgeScene {
             for (c, &y) in row.y.iter().enumerate() {
                 if y.is_finite() {
                     has_data = true;
-                    if y > ymax_data { ymax_data = y; }
-                    if c < xmin { xmin = c; }
-                    if c > xmax_data { xmax_data = c; }
+                    if y > ymax_data {
+                        ymax_data = y;
+                    }
+                    if c < xmin {
+                        xmin = c;
+                    }
+                    if c > xmax_data {
+                        xmax_data = c;
+                    }
                 }
             }
             // Fills reach the baseline, so it bounds the content from below.
@@ -186,7 +192,13 @@ impl RidgeScene {
             ylim: [ymin - dy, ymax_data + dy],
         };
 
-        RidgeScene { rows, n_points: ncols, vmin, vmax, layout }
+        RidgeScene {
+            rows,
+            n_points: ncols,
+            vmin,
+            vmax,
+            layout,
+        }
     }
 
     /// Color for line `idx` under `Gradient` mode (upstream `line_color(i/n)`).
@@ -304,7 +316,9 @@ pub fn build_scene_fit(
     };
     if rotating {
         values = match fit {
-            Fit::Plane => crate::rotate::rotate_fixed_plane(&values, viewpoint_angle, interpolation),
+            Fit::Plane => {
+                crate::rotate::rotate_fixed_plane(&values, viewpoint_angle, interpolation)
+            }
             Fit::Reshape => crate::rotate::rotate(&values, viewpoint_angle, !crop, interpolation),
         };
     }
@@ -313,7 +327,7 @@ pub fn build_scene_fit(
         water_ntile,
         lake_flatness,
         vertical_ratio,
-        1.0, // reshape is upstream-faithful: naive threshold at grid sampling
+        1.0,  // reshape is upstream-faithful: naive threshold at grid sampling
         None, // stats over the whole (rotated) grid
     )?;
     Ok(RidgeScene::from_grid(&processed, bbox.ratio(), size_scale))

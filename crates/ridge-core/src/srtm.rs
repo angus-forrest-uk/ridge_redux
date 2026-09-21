@@ -56,7 +56,12 @@ impl Tile {
         for chunk in data.chunks_exact(2) {
             values.push(i16::from_be_bytes([chunk[0], chunk[1]]));
         }
-        Ok(Tile { lat_lo, lon_lo, side, data: values })
+        Ok(Tile {
+            lat_lo,
+            lon_lo,
+            side,
+            data: values,
+        })
     }
 
     pub fn resolution(&self) -> f64 {
@@ -228,13 +233,14 @@ impl RemoteSource {
     pub fn default_paths() -> Result<Self> {
         let cache = std::env::var("XDG_CACHE_HOME")
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| {
-                dirs_home().join(".cache")
-            })
+            .unwrap_or_else(|_| dirs_home().join(".cache"))
             .join("ridge-redux")
             .join("srtm");
         Self::new(
-            &["https://srtm.kurviger.de/SRTM1/", "https://srtm.kurviger.de/SRTM3/"],
+            &[
+                "https://srtm.kurviger.de/SRTM1/",
+                "https://srtm.kurviger.de/SRTM3/",
+            ],
             cache,
         )
     }
@@ -323,7 +329,9 @@ impl RemoteSource {
             Err(_) => {
                 let index = self.index()?;
                 let url = index.get(&name).ok_or_else(|| {
-                    Error::Srtm(format!("no tile {name} on the mirror (ocean or out of range?)"))
+                    Error::Srtm(format!(
+                        "no tile {name} on the mirror (ocean or out of range?)"
+                    ))
                 })?;
                 let zipped = self.fetch_url(url)?;
                 let raw = unzip_single(&zipped, &name)
@@ -376,7 +384,10 @@ fn dirs_home() -> PathBuf {
 /// (or the first entry) and decompress it. Handles stored + deflate entries.
 pub fn unzip_single(zip: &[u8], want_suffix: &str) -> Option<Vec<u8>> {
     // End of central directory record.
-    let eocd = zip.windows(22).rev().find(|w| w[..4] == [0x50, 0x4b, 0x05, 0x06])?;
+    let eocd = zip
+        .windows(22)
+        .rev()
+        .find(|w| w[..4] == [0x50, 0x4b, 0x05, 0x06])?;
     let eocd_pos = zip.len() - eocd.len();
     let entries = u16::from_le_bytes([eocd[10], eocd[11]]) as usize;
     let cd_size = u32::from_le_bytes([eocd[12], eocd[13], eocd[14], eocd[15]]) as usize;
@@ -404,8 +415,7 @@ pub fn unzip_single(zip: &[u8], want_suffix: &str) -> Option<Vec<u8>> {
             continue;
         }
         // Local file header: skip name + extra to find data.
-        if local_off + 30 > zip.len() || zip[local_off..local_off + 4] != [0x50, 0x4b, 0x03, 0x04]
-        {
+        if local_off + 30 > zip.len() || zip[local_off..local_off + 4] != [0x50, 0x4b, 0x03, 0x04] {
             return None;
         }
         let l_name = u16::from_le_bytes([zip[local_off + 26], zip[local_off + 27]]) as usize;

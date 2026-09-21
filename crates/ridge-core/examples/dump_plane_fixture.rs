@@ -13,8 +13,7 @@ fn main() {
     // flatness) run on the unrotated grid; the masked/scaled/flipped result
     // is then rotated for display.
     let values = ridge_core::grid::sample(&src, &bbox, n, p);
-    let processed =
-        ridge_core::preprocess::preprocess(&values, 10.0, 3, 40.0, 1.0, None).unwrap();
+    let processed = ridge_core::preprocess::preprocess(&values, 10.0, 3, 40.0, 1.0, None).unwrap();
     let rotated = ridge_core::rotate::rotate_fixed_plane(&processed, -33.0, 0);
 
     // Scene via RidgeScene::from_grid for layout parity too.
@@ -23,7 +22,11 @@ fn main() {
     let to_val = |g: &Array2<f64>| {
         g.rows()
             .into_iter()
-            .map(|r| r.iter().map(|v| if v.is_finite() { Some(*v) } else { None }).collect::<Vec<_>>())
+            .map(|r| {
+                r.iter()
+                    .map(|v| if v.is_finite() { Some(*v) } else { None })
+                    .collect::<Vec<_>>()
+            })
             .collect::<Vec<_>>()
     };
     let doc = serde_json::json!({
@@ -37,5 +40,9 @@ fn main() {
         "layout": serde_json::to_value(&scene.layout).unwrap(),
     });
     std::fs::write("/tmp/plane_fixture.json", doc.to_string()).unwrap();
-    println!("fixture written: {} rows x {} cols", processed.nrows(), processed.ncols());
+    println!(
+        "fixture written: {} rows x {} cols",
+        processed.nrows(),
+        processed.ncols()
+    );
 }

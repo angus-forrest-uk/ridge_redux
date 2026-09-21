@@ -124,7 +124,9 @@ impl Args {
                     a.bbox = Bbox::new(nums[0], nums[1], nums[2], nums[3]);
                 }
                 "--num-lines" => a.num_lines = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--elevation-pts" => a.elevation_pts = val()?.parse().map_err(|e| format!("{e}"))?,
+                "--elevation-pts" => {
+                    a.elevation_pts = val()?.parse().map_err(|e| format!("{e}"))?
+                }
                 "--angle" => a.viewpoint_angle = val()?.parse().map_err(|e| format!("{e}"))?,
                 "--crop" => a.crop = true,
                 "--interpolation" => {
@@ -135,7 +137,9 @@ impl Args {
                     a.interpolation = v;
                 }
                 "--water-ntile" => a.water_ntile = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--lake-flatness" => a.lake_flatness = val()?.parse().map_err(|e| format!("{e}"))?,
+                "--lake-flatness" => {
+                    a.lake_flatness = val()?.parse().map_err(|e| format!("{e}"))?
+                }
                 "--vertical-ratio" => {
                     a.vertical_ratio = val()?.parse().map_err(|e| format!("{e}"))?
                 }
@@ -222,8 +226,7 @@ fn main() {
         },
         None => None,
     };
-    let background = ridge_core::colormap::hex_checked(&args.background)
-        .unwrap_or([236, 232, 236]);
+    let background = ridge_core::colormap::hex_checked(&args.background).unwrap_or([236, 232, 236]);
 
     let scene = match build_scene(
         source.as_ref(),
@@ -318,4 +321,3 @@ fn dirs_default() -> std::path::PathBuf {
         .join("ridge-redux")
         .join("srtm")
 }
-
