@@ -16,6 +16,11 @@ updates:
     groups:
       npm:
         update-types: [minor, patch]
+    ignore:
+      # `astro check` needs TypeScript's programmatic API, which TypeScript 7
+      # (the native compiler) doesn't ship yet.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
