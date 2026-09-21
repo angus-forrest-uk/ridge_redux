@@ -1,5 +1,9 @@
 # ridge-redux
 
+[![CI](https://github.com/angus-forrest-uk/ridge_redux/actions/workflows/ci.yml/badge.svg)](https://github.com/angus-forrest-uk/ridge_redux/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/ridge_redux.svg)](https://crates.io/crates/ridge_redux)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 *Ridgeline plots of ridges, in Rust, in your browser.*
 
 > **TL;DR:** [ridge_map](https://github.com/ColCarroll/ridge_map) makes
@@ -258,13 +262,14 @@ just web          # build the frontend (web/: Astro + SolidJS) into web/dist
 just run          # build the frontend, then serve the app on localhost
 just offline      # same, against the fixture tiles, with no network
 just web-dev      # frontend dev server with live reload on :4321 (API from `just run`)
-just test         # 44 Rust tests: 31 unit (incl. golden parity) + 13 API
+just test         # 47 Rust tests: 31 ridge-core (incl. golden parity) + 16 ridge_redux
 just test-web     # Vitest: app state + TS pipeline == Rust pipeline (bit-for-bit)
 just check-web    # type-check the frontend
 just fixtures     # fetch the SRTM tiles for the golden parity test
 just fmt          # cargo fmt
 just clippy       # clippy, warnings are errors
 just ci           # everything CI runs: fmt-check, clippy, test, check-web, test-web
+just package      # package both crates for crates.io, with the frontend bundled in
 just render --bbox "..." --out out.svg   # headless SVG render
 just screenshots  # regenerate docs/screenshots/ with Playwright (app must be running)
 ```
@@ -286,6 +291,10 @@ cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity c
   `--fixture-dir` + `DirSource` in code.
 - Mirrors are configurable: `--srtm-base "URL1,URL2"` (default: kurviger
   SRTM1, falling back to the global SRTM3 set).
+- Releases: [release-plz](https://release-plz.dev) keeps a release PR open
+  with the next version and `CHANGELOG.md`, built from
+  [Conventional Commits](https://www.conventionalcommits.org). Merging it
+  publishes to crates.io and makes a GitHub Release.
 - Font: labels use [Cinzel](https://fonts.google.com/specimen/Cinzel), loaded
   from Google Fonts by the frontend. SVG export references the family by name
   (browsers fetch it); server-side rasterization falls back to serif.
