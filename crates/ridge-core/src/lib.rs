@@ -1,6 +1,8 @@
-//! ridge-core: the data pipeline behind ridgeline terrain art.
+#![doc = include_str!("../README.md")]
 //!
-//! Port of the Python `ridge_map` package (with the parts of `SRTM.py`,
+//! ## Implementation notes
+//!
+//! A port of the Python `ridge_map` package (with the parts of `SRTM.py`,
 //! `numpy` and `scipy.ndimage` it relies on) to Rust, minus matplotlib:
 //! rendering is delegated to [`svg`] (server-side export) or to the web
 //! frontend, which consumes [`geometry::RidgeScene`] JSON.
