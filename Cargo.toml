@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/ridge-core", "crates/ridge_redux"]
+# A bare `cargo run` starts the app, not ridge-core's `render` CLI.
+default-members = ["crates/ridge_redux"]
 
 [workspace.package]
 version = "0.1.0"
