@@ -52,10 +52,12 @@ impl Tile {
             )));
         }
         let side = side as usize;
-        let mut values = Vec::with_capacity(n);
-        for chunk in data.chunks_exact(2) {
-            values.push(i16::from_be_bytes([chunk[0], chunk[1]]));
-        }
+        let values: Vec<i16> = data
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&pair| i16::from_be_bytes(pair))
+            .collect();
         Ok(Tile {
             lat_lo,
             lon_lo,

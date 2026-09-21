@@ -287,10 +287,12 @@ mod parity_tests {
             eprintln!("skipping: fixtures not fetched (scripts/fetch_fixtures.sh)");
             return;
         }
-        let expected: Vec<f64> = std::fs::read(bin)
-            .unwrap()
-            .chunks_exact(8)
-            .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
+        let bytes = std::fs::read(bin).unwrap();
+        let expected: Vec<f64> = bytes
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|&b| f64::from_le_bytes(b))
             .collect();
 
         let src = DirSource::new(srtm_dir);
