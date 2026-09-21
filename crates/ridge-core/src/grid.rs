@@ -278,7 +278,13 @@ mod parity_tests {
         let bin = Path::new("../../fixtures/new_hampshire.f64.bin");
         let srtm_dir = Path::new("../../fixtures/srtm");
         if !bin.exists() || !srtm_dir.exists() {
-            eprintln!("skipping: fixtures not fetched");
+            // This test is the evidence that sampling matches upstream, so CI
+            // sets RIDGE_REQUIRE_FIXTURES and a missing fixture fails it.
+            assert!(
+                std::env::var_os("RIDGE_REQUIRE_FIXTURES").is_none(),
+                "RIDGE_REQUIRE_FIXTURES is set but the fixtures are missing; run scripts/fetch_fixtures.sh"
+            );
+            eprintln!("skipping: fixtures not fetched (scripts/fetch_fixtures.sh)");
             return;
         }
         let expected: Vec<f64> = std::fs::read(bin)
