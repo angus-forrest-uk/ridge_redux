@@ -26,6 +26,8 @@ pub struct ServerConfig {
     pub cache_dir: PathBuf,
     /// Serve tiles from this dir instead of the network (offline/demo mode).
     pub fixture_dir: Option<PathBuf>,
+    /// Open the app in the default browser once it's listening.
+    pub open_browser: bool,
 }
 
 fn default_cache_dir() -> PathBuf {
@@ -46,6 +48,7 @@ impl ServerConfig {
             "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".to_string();
         let mut cache_dir = default_cache_dir();
         let mut fixture_dir = None;
+        let mut open_browser = true;
 
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
@@ -56,9 +59,10 @@ impl ServerConfig {
                 "--srtm-base" => srtm_base = val(),
                 "--cache-dir" => cache_dir = PathBuf::from(val()),
                 "--fixture-dir" => fixture_dir = Some(PathBuf::from(val())),
+                "--no-open" => open_browser = false,
                 "--help" => {
                     println!(
-                        "ridge_redux [--addr IP:PORT] [--web-dir DIR] [--srtm-base URL] \
+                        "ridge_redux [--addr IP:PORT] [--no-open] [--web-dir DIR] [--srtm-base URL] \
                          [--cache-dir DIR] [--fixture-dir DIR]"
                     );
                     std::process::exit(0);
@@ -75,6 +79,7 @@ impl ServerConfig {
             srtm_base,
             cache_dir,
             fixture_dir,
+            open_browser,
         }
     }
 }
@@ -92,19 +97,19 @@ pub async fn run() {
 
     let app = build_router(state, &config);
 
-    let cfg = config.clone();
-    match &cfg.web_dir {
-        Some(dir) => tracing::info!(
-            "ridge_redux listening on http://{} (web dir: {})",
-            cfg.addr,
-            dir.display()
-        ),
-        None => tracing::info!("ridge_redux listening on http://{}", cfg.addr),
+    if let Some(dir) = &config.web_dir {
+        tracing::info!("serving the frontend from {}", dir.display());
     }
-
-    let listener = tokio::net::TcpListener::bind(cfg.addr)
+    let listener = tokio::net::TcpListener::bind(config.addr)
         .await
         .expect("failed to bind");
+    let url = format!("http://{}", listener.local_addr().expect("bound address"));
+    println!("ridge_redux running at {url}");
+    if config.open_browser {
+        if let Err(e) = open::that_detached(&url) {
+            tracing::warn!("couldn't open a browser ({e}); open {url} yourself");
+        }
+    }
     axum::serve(listener, app).await.expect("server error");
 }
 

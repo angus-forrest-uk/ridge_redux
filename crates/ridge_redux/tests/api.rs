@@ -32,6 +32,7 @@ fn fixture_config() -> ServerConfig {
         srtm_base: "http://127.0.0.1:1/invalid/".into(), // must never be hit
         cache_dir: std::env::temp_dir().join("ridge-test-cache"),
         fixture_dir: dir.ok(),
+        open_browser: false,
     }
 }
 

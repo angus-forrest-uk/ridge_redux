@@ -35,7 +35,7 @@ later, to build the frontend.
 ```bash
 cargo install ridge_redux
 ridge_redux
-# open http://127.0.0.1:8420
+# opens http://127.0.0.1:8420 in your browser
 ```
 
 **From source**
@@ -45,7 +45,7 @@ git clone https://github.com/angus-forrest-uk/ridge_redux
 cd ridge_redux
 npm --prefix web ci && npm --prefix web run build   # frontend -> web/dist
 cargo run --release
-# open http://127.0.0.1:8420
+# opens http://127.0.0.1:8420 in your browser
 ```
 
 ## Why a local server?
@@ -280,6 +280,8 @@ cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity c
   installed `ridge_redux` needs nothing beside it. Without a frontend build,
   the binary embeds a page saying how to make one. `--web-dir web/dist`
   serves the frontend from disk instead.
+- The app opens in your default browser on start; `--no-open` skips that
+  (for headless machines and scripts).
 - Offline/demo mode: `--fixture-dir fixtures/srtm` (server) or
   `--fixture-dir` + `DirSource` in code.
 - Mirrors are configurable: `--srtm-base "URL1,URL2"` (default: kurviger
