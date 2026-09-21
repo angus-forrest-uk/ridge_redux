@@ -9,7 +9,7 @@ web:
     npm --prefix web install --silent
     npm --prefix web run build
 
-# Build the frontend, then run the app on localhost
+# Build the frontend, then run the app on localhost (the frontend is compiled into the binary)
 run *args: web
     cargo run --release -- {{args}}
 

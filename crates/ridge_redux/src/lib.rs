@@ -6,6 +6,7 @@
 //! `POST /api/export.svg` returns a standalone vector SVG.
 
 pub mod api;
+mod frontend;
 pub mod state;
 
 use std::net::SocketAddr;
@@ -19,7 +20,8 @@ use tower_http::trace::TraceLayer;
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub addr: SocketAddr,
-    pub web_dir: PathBuf,
+    /// Serve the frontend from this directory instead of the embedded copy.
+    pub web_dir: Option<PathBuf>,
     pub srtm_base: String,
     pub cache_dir: PathBuf,
     /// Serve tiles from this dir instead of the network (offline/demo mode).
@@ -39,7 +41,7 @@ fn default_cache_dir() -> PathBuf {
 impl ServerConfig {
     pub fn from_env_and_args() -> ServerConfig {
         let mut addr = SocketAddr::from(([127, 0, 0, 1], 8420));
-        let mut web_dir = PathBuf::from("web/dist");
+        let mut web_dir = None;
         let mut srtm_base =
             "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".to_string();
         let mut cache_dir = default_cache_dir();
@@ -50,7 +52,7 @@ impl ServerConfig {
             let mut val = || args.next().expect("missing value");
             match arg.as_str() {
                 "--addr" => addr = val().parse().expect("bad --addr"),
-                "--web-dir" => web_dir = PathBuf::from(val()),
+                "--web-dir" => web_dir = Some(PathBuf::from(val())),
                 "--srtm-base" => srtm_base = val(),
                 "--cache-dir" => cache_dir = PathBuf::from(val()),
                 "--fixture-dir" => fixture_dir = Some(PathBuf::from(val())),
@@ -91,11 +93,14 @@ pub async fn run() {
     let app = build_router(state, &config);
 
     let cfg = config.clone();
-    tracing::info!(
-        "ridge_redux listening on http://{} (web dir: {})",
-        cfg.addr,
-        cfg.web_dir.display()
-    );
+    match &cfg.web_dir {
+        Some(dir) => tracing::info!(
+            "ridge_redux listening on http://{} (web dir: {})",
+            cfg.addr,
+            dir.display()
+        ),
+        None => tracing::info!("ridge_redux listening on http://{}", cfg.addr),
+    }
 
     let listener = tokio::net::TcpListener::bind(cfg.addr)
         .await
@@ -105,18 +110,20 @@ pub async fn run() {
 
 /// Build the full app router (separated for integration tests).
 pub fn build_router(state: state::AppState, config: &ServerConfig) -> Router {
-    Router::new()
+    let api = Router::new()
         .route("/healthz", get(api::healthz))
         .route("/api/presets", get(api::presets))
         .route("/api/readme", get(api::readme))
         .route("/api/preview", post(api::preview))
         .route("/api/elevation", post(api::elevation))
-        .route("/api/export.svg", post(api::export_svg))
-        .fallback_service(
-            tower_http::services::ServeDir::new(&config.web_dir)
-                .append_index_html_on_directories(true),
-        )
-        .layer(CompressionLayer::new())
+        .route("/api/export.svg", post(api::export_svg));
+    let app = match &config.web_dir {
+        Some(dir) => api.fallback_service(
+            tower_http::services::ServeDir::new(dir).append_index_html_on_directories(true),
+        ),
+        None => api.fallback(frontend::serve),
+    };
+    app.layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

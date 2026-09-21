@@ -28,7 +28,7 @@ fn fixture_config() -> ServerConfig {
     let dir = std::path::Path::new("../../fixtures/srtm").canonicalize();
     ServerConfig {
         addr: "127.0.0.1:0".parse().unwrap(),
-        web_dir: web_dir(),
+        web_dir: Some(web_dir()),
         srtm_base: "http://127.0.0.1:1/invalid/".into(), // must never be hit
         cache_dir: std::env::temp_dir().join("ridge-test-cache"),
         fixture_dir: dir.ok(),
@@ -211,6 +211,26 @@ async fn static_index_served() {
     assert_eq!(resp.status(), StatusCode::OK);
     let bytes = body_bytes(resp).await;
     assert!(String::from_utf8_lossy(&bytes).contains("ridge-redux"));
+}
+
+#[tokio::test]
+async fn embedded_frontend_served() {
+    let config = ServerConfig {
+        web_dir: None,
+        ..fixture_config()
+    };
+    let app = build_router(AppState::new(&config), &config);
+    let resp = app
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(resp.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .starts_with("text/html"));
+    let html = String::from_utf8(body_bytes(resp).await).unwrap();
+    assert!(html.contains("ridge-redux"));
 }
 
 #[tokio::test]

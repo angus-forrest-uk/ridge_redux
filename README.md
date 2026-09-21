@@ -276,6 +276,10 @@ cargo run -p ridge-core --example debug_tile          # connectivity diagnostics
 cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity check
 ```
 
+- The built frontend (`web/dist`) is compiled into the binary, so an
+  installed `ridge_redux` needs nothing beside it. Without a frontend build,
+  the binary embeds a page saying how to make one. `--web-dir web/dist`
+  serves the frontend from disk instead.
 - Offline/demo mode: `--fixture-dir fixtures/srtm` (server) or
   `--fixture-dir` + `DirSource` in code.
 - Mirrors are configurable: `--srtm-base "URL1,URL2"` (default: kurviger
