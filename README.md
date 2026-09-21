@@ -1,8 +1,8 @@
 # ridge-redux
 
-*Ridgeline plots of ridges — in Rust, in your browser.*
+*Ridgeline plots of ridges, in Rust, in your browser.*
 
-> **TL;DR** — [ridge_map](https://github.com/ColCarroll/ridge_map) makes
+> **TL;DR:** [ridge_map](https://github.com/ColCarroll/ridge_map) makes
 > beautiful ridgeline maps. To make these maps, you need to modify a Python script: choose
 > coordinates by hand, re-run for every angle or colour, and get a static
 > matplotlib figure. ridge-redux is the same pipeline in Rust (its sampling
@@ -87,7 +87,7 @@ to `127.0.0.1` by default. Don't expose it on an untrusted network with
 
 On first use the server downloads SRTM elevation tiles on demand and caches
 them under `~/.cache/ridge-redux/srtm/` (one fetch per tile, ever).
-Drag to pan, wheel to zoom — both instant, purely client-side. The
+Drag to pan, wheel to zoom: both instant, purely client-side. The
 **viewpoint-angle, water and relief sliders are also instant**: the server
 ships the raw elevation grid once per location/resolution
 (`POST /api/elevation`), and the browser rotates it about its center, masks
@@ -104,15 +104,15 @@ both ways with the coordinate inputs and presets. Areas beyond SRTM coverage (|�
 drawn selections are clamped to the covered band.
 
 **Rotation model** (all client-side, one elevation fetch): the backend ships
-a rotation-invariant **disc** of samples — a square region around your bbox
+a rotation-invariant **disc** of samples: a square region around your bbox
 center masked to the inscribed circle (span = the bbox diagonal by default,
 adjustable). Both view modes are then just windows over that disc, rotated
 about its center:
 
-- **Rectangle** — a fixed `num_lines × elevation_pts` window; identical
+- **Rectangle**: a fixed `num_lines × elevation_pts` window; identical
   style, spacing and ratios at every angle, with previously unused points
   rotating into frame as it sweeps around.
-- **Full disc** — shows the whole circle (square figure).
+- **Full disc**: shows the whole circle (square figure).
 
 No zoom compensation, no re-requesting: the point count inside the window is
 constant at every angle (±<2%, just coastline voids rotating at the rim).
@@ -174,19 +174,19 @@ authoritative export (sampling, SVG). The browser owns everything
 per-interactive-frame: rotation about the landscape center (the plane never
 moves, so zoom/distance stay fixed), water/lake masking, and drawing. A
 parity test (`scripts/parity_frontend.mjs`) proves the JS pipeline matches
-the Rust one bit-for-bit (worst delta 0.0 on a rotated fixture). No WASM —
+the Rust one bit-for-bit (worst delta 0.0 on a rotated fixture). No WASM:
 a 300×300 grid pipelines in a few milliseconds of plain JS; if you ever
 want 1000×1000 at frame rate, `ridge-core` is structured to compile to WASM
 via wasm-bindgen and drop in.
 
 ## API
 
-`POST /api/elevation` — the call the frontend makes. It takes
+`POST /api/elevation` is the call the frontend makes. It takes
 `{ bbox, num_lines, elevation_pts, region: "rect" | "disc", span_deg }` and returns
 the raw sampled grid as `{ shape, values, window }`: whole metres, with `null` for
 voids. Rotation, masking and drawing then happen in the browser.
 
-`POST /api/preview` — body is a JSON `RenderParams` (all fields optional,
+`POST /api/preview`: the body is a JSON `RenderParams` (all fields optional,
 see [`crates/ridge-server/src/api.rs`](crates/ridge-server/src/api.rs)):
 
 ```jsonc
@@ -208,29 +208,29 @@ see [`crates/ridge-server/src/api.rs`](crates/ridge-server/src/api.rs)):
 Response: `{ shape, rows: [{baseline, y[...]}], vmin, vmax, layout, style }`
 where `y` values are `null` across water/gaps. The frontend maps `layout`
 into canvas coordinates and paints rows back-to-front with a background-color
-fill under each line — the same occlusion trick as upstream `fill_between`.
+fill under each line, the same occlusion trick as upstream `fill_between`.
 
 `POST /api/export.svg` takes the identical body and returns standalone SVG.
 `GET /api/presets` lists 10 curated locations (same as the upstream README).
 
 ## Fidelity to upstream
 
-The port is deliberately faithful — the odd corners are reproduced:
+The port is deliberately faithful, down to the odd corners:
 
 - **lake flatness is computed on floats with spatial coherence**: the
   gradient runs on normalized floats (threshold `lake_flatness/255`, same
   semantics as upstream's u8 rank gradient but without its rounding
   terraces), water/NaN cells are excluded from the neighborhoods (skimage's
-  `mask` parameter — so flat shores merge into the water body instead of
+  `mask` parameter, so flat shores merge into the water body instead of
   forming a drawn perimeter), and lake candidates survive only as connected
-  components of ≥12 cells — no speckle holes on rolling hills,
+  components of ≥12 cells, so there are no speckle holes on rolling hills,
 - **the water percentile ignores NaN padding**: in disc mode ~21% of the
   sample square is padding; computing the percentile over it would pin the
   water level to zero and erase every river and stream, so it is measured
   over in-disc terrain only,
 - **masks are decided before rotation**: water percentile, lake mask and
   normalization run once on the unrotated disc, and the masked grid is then
-  rotated for display — decisions attach to physical locations, so nothing
+  rotated for display. Decisions attach to physical locations, so nothing
   flickers as the angle changes,
 - sampling uses `lat0 + r/N * dlat` (stops one step short of the far corner),
 - viewpoint angles in (45°,135°) ∪ (225°,315°) swap `num_lines`/`elevation_pts`,
@@ -241,7 +241,7 @@ The port is deliberately faithful — the odd corners are reproduced:
 - lines step `-6` per row, colored by row index (gradient) or elevation.
 
 The golden test compares our sampled White Mountains grid against the upstream
-test fixture ([`test/test_data/new_hampshire.npz`](https://github.com/ColCarroll/ridge_map/tree/main/test/test_data)) — **0/24000
+test fixture ([`test/test_data/new_hampshire.npz`](https://github.com/ColCarroll/ridge_map/tree/main/test/test_data)): **0/24000
 mismatches**, i.e. bit-for-bit identical sampling to Python + srtm.py.
 
 ## Development
@@ -279,7 +279,7 @@ cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity c
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE). ridge-redux is a port of ridge_map, which
+MIT, see [`LICENSE`](LICENSE). ridge-redux is a port of ridge_map, which
 is also MIT. Its copyright notice is kept in [`LICENSE-upstream`](LICENSE-upstream).
 
 Elevation data: NASA [Shuttle Radar Topography Mission](https://www2.jpl.nasa.gov/srtm/),
