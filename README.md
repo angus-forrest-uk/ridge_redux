@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/angus-forrest-uk/ridge_redux/actions/workflows/ci.yml/badge.svg)](https://github.com/angus-forrest-uk/ridge_redux/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/ridge_redux.svg)](https://crates.io/crates/ridge_redux)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/angus-forrest-uk/ridge_redux/blob/main/LICENSE)
 
 *Ridgeline plots of ridges, in Rust, in your browser.*
 
@@ -14,17 +14,17 @@
 > area on a map, rotate and restyle instantly, export SVG or PNG. One
 > `cargo install`.
 
-![The ridge-redux app: the artwork on the left, its controls on the right, the location map below](docs/screenshots/app.png)
+![The ridge-redux app: the artwork on the left, its controls on the right, the location map below](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/docs/screenshots/app.png)
 
 | Rotate and restyle, instantly | Pick the area on the map |
 |---|---|
-| ![Karwendelgebirge rotated to 30°](docs/screenshots/rotated.png) | ![Drawing a new area with the select tool](docs/screenshots/map-select.png) |
+| ![Karwendelgebirge rotated to 30°](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/docs/screenshots/rotated.png) | ![Drawing a new area with the select tool](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/docs/screenshots/map-select.png) |
 | Presets, the viewpoint angle, water, relief and style all redraw in the browser as you drag. | **move** pans the map; **select** (or Shift-drag) draws the area to render. |
 
 <details>
 <summary>Every control</summary>
 
-![The control sidebar](docs/screenshots/controls.png)
+![The control sidebar](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/docs/screenshots/controls.png)
 
 </details>
 
@@ -131,9 +131,9 @@ upstream README):
 
 | | |
 |---|---|
-| ![Karwendelgebirge](examples/karwendelgebirge.png) | ![Hawaii](examples/hawaii.png) |
+| ![Karwendelgebirge](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/examples/karwendelgebirge.png) | ![Hawaii](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/examples/hawaii.png) |
 | Karwendelgebirge (SRTM3 fallback) | Hawai'i, `ocean` colormap, `kind=elevation` |
-| ![Washington](examples/washington.png) | ![White Mountains](examples/white_mountains.png) |
+| ![Washington](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/examples/washington.png) | ![White Mountains](https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/main/examples/white_mountains.png) |
 | Washington | The default: The White Mountains |
 
 You can also render headless with the CLI (great for piping to a file):
@@ -195,7 +195,7 @@ the raw sampled grid as `{ shape, values, window }`: whole metres, with `null` f
 voids. Rotation, masking and drawing then happen in the browser.
 
 `POST /api/preview`: the body is a JSON `RenderParams` (all fields optional,
-see [`crates/ridge_redux/src/api.rs`](crates/ridge_redux/src/api.rs)):
+see [`crates/ridge_redux/src/api.rs`](https://github.com/angus-forrest-uk/ridge_redux/blob/main/crates/ridge_redux/src/api.rs)):
 
 ```jsonc
 {
@@ -301,8 +301,8 @@ cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity c
 
 ## License
 
-MIT, see [`LICENSE`](LICENSE). ridge-redux is a port of ridge_map, which
-is also MIT. Its copyright notice is kept in [`LICENSE-upstream`](LICENSE-upstream).
+MIT, see [`LICENSE`](https://github.com/angus-forrest-uk/ridge_redux/blob/main/LICENSE). ridge-redux is a port of ridge_map, which
+is also MIT. Its copyright notice is kept in [`LICENSE-upstream`](https://github.com/angus-forrest-uk/ridge_redux/blob/main/LICENSE-upstream).
 
 Elevation data: NASA [Shuttle Radar Topography Mission](https://www2.jpl.nasa.gov/srtm/),
 available between 60°N and 60°S.
