@@ -2,6 +2,9 @@
 # .github/workflows/release-plz.yml.
 
 [workspace]
+# Publish only when a release-plz PR is merged, never straight from a push
+# (the first push would otherwise publish 0.1.0 at once).
+release_always = false
 # The built frontend is copied into crates/ridge_redux/dist (gitignored) just
 # before publishing, and cargo counts that as uncommitted changes.
 publish_allow_dirty = true
