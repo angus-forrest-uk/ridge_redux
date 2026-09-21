@@ -20,7 +20,7 @@ path = "src/main.rs"
 ridge-core = { path = "../ridge-core", version = "0.1.0" }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
-tower-http = { version = "0.6", features = ["fs", "compression-gzip", "trace", "cors"] }
+tower-http = { version = "0.7", features = ["fs", "compression-gzip", "trace", "cors"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 ndarray = { workspace = true }
