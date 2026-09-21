@@ -1,0 +1,24 @@
+# Releases: merging release-plz's PR publishes to crates.io. See
+# .github/workflows/release-plz.yml.
+
+[workspace]
+# The built frontend is copied into crates/ridge_redux/dist (gitignored) just
+# before publishing, and cargo counts that as uncommitted changes.
+publish_allow_dirty = true
+# One changelog, one tag and one GitHub Release, all for the app (below).
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+
+[[package]]
+name = "ridge_redux"
+changelog_update = true
+changelog_path = "./CHANGELOG.md"
+changelog_include = ["ridge-core"]
+git_tag_enable = true
+git_release_enable = true
+version_group = "ridge"
+
+[[package]]
+name = "ridge-core"
+version_group = "ridge"

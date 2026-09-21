@@ -17,10 +17,14 @@ run *args: web
 offline: web fixtures
     cargo run --release -- --fixture-dir fixtures/srtm
 
-# Package both crates for crates.io, with the built frontend copied into ridge_redux
-package: web
+# Copy the built frontend into the ridge_redux crate, which publishes it (gitignored there)
+bundle: web
     rm -rf crates/ridge_redux/dist
     cp -r web/dist crates/ridge_redux/dist
+
+# Package both crates for crates.io. Cargo counts the bundled, gitignored
+# frontend as uncommitted changes, hence --allow-dirty.
+package: bundle
     cargo package --workspace --allow-dirty
 
 # Frontend dev server with live reload on :4321; its API calls go to `just run` on :8420
