@@ -1,12 +1,12 @@
 [package]
-name = "ridge-server"
-description = "Webapp backend for ridge-redux: JSON preview API + SVG export"
+name = "ridge_redux"
+description = "Interactive ridgeline maps of real terrain, as a local web app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "ridge-server"
+name = "ridge_redux"
 path = "src/main.rs"
 
 [dependencies]
@@ -24,5 +24,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower = { version = "0.5", features = ["util"] }
 
 [lib]
-name = "ridge_server"
+name = "ridge_redux"
 path = "src/lib.rs"

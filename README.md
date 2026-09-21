@@ -149,7 +149,7 @@ water percentile, annotations, …).
 
 ```
 ┌────────────────────────── backend (Rust) ──────────────────────────┐
-│ ridge-core                       ridge-server (axum)               │
+│ ridge-core                       ridge_redux (axum)                │
 │ ├─ srtm: .hgt fetch/parse/cache  ├─ POST /api/elevation → raw grid │
 │ │   (SRTM1 → SRTM3 fallback,     ├─ POST /api/preview  → JSON      │
 │ │    zip support, disk cache)    ├─ POST /api/export.svg → SVG     │
@@ -191,7 +191,7 @@ the raw sampled grid as `{ shape, values, window }`: whole metres, with `null` f
 voids. Rotation, masking and drawing then happen in the browser.
 
 `POST /api/preview`: the body is a JSON `RenderParams` (all fields optional,
-see [`crates/ridge-server/src/api.rs`](crates/ridge-server/src/api.rs)):
+see [`crates/ridge_redux/src/api.rs`](crates/ridge_redux/src/api.rs)):
 
 ```jsonc
 {

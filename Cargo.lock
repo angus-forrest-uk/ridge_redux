@@ -692,7 +692,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ridge-server"
+name = "ridge_redux"
 version = "0.1.0"
 dependencies = [
  "axum",

@@ -5,7 +5,7 @@ use axum::http::{Request, StatusCode};
 use serde_json::json;
 use tower::ServiceExt; // oneshot
 
-use ridge_server::{build_router, state::AppState, ServerConfig};
+use ridge_redux::{build_router, state::AppState, ServerConfig};
 
 /// A stand-in for the built frontend (web/dist), so these tests don't need
 /// the Node build.

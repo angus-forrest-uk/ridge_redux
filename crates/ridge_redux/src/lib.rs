@@ -1,4 +1,4 @@
-//! ridge-server: HTTP API + static frontend for interactive ridgeline art.
+//! ridge_redux: HTTP API + static frontend for interactive ridgeline art.
 //!
 //! The backend owns the data pipeline (SRTM fetch -> sample -> rotate ->
 //! preprocess) and exposes it as JSON geometry; the frontend is a thin
@@ -56,7 +56,7 @@ impl ServerConfig {
                 "--fixture-dir" => fixture_dir = Some(PathBuf::from(val())),
                 "--help" => {
                     println!(
-                        "ridge-server [--addr IP:PORT] [--web-dir DIR] [--srtm-base URL] \
+                        "ridge_redux [--addr IP:PORT] [--web-dir DIR] [--srtm-base URL] \
                          [--cache-dir DIR] [--fixture-dir DIR]"
                     );
                     std::process::exit(0);
@@ -81,7 +81,7 @@ pub async fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "ridge_server=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "ridge_redux=info,tower_http=info".into()),
         )
         .init();
 
@@ -92,7 +92,7 @@ pub async fn run() {
 
     let cfg = config.clone();
     tracing::info!(
-        "ridge-server listening on http://{} (web dir: {})",
+        "ridge_redux listening on http://{} (web dir: {})",
         cfg.addr,
         cfg.web_dir.display()
     );

@@ -1,4 +1,4 @@
 #[tokio::main]
 async fn main() {
-    ridge_server::run().await;
+    ridge_redux::run().await;
 }

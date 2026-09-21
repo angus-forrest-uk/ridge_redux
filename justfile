@@ -11,11 +11,11 @@ web:
 
 # Build the frontend, then run the app on localhost
 run *args: web
-    cargo run --release -p ridge-server -- {{args}}
+    cargo run --release -p ridge_redux -- {{args}}
 
 # Run the app offline against the fixture tiles
 offline: web fixtures
-    cargo run --release -p ridge-server -- --fixture-dir fixtures/srtm
+    cargo run --release -p ridge_redux -- --fixture-dir fixtures/srtm
 
 # Frontend dev server with live reload on :4321; its API calls go to `just run` on :8420
 web-dev:

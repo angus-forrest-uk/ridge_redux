@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ridge-core", "crates/ridge-server"]
+members = ["crates/ridge-core", "crates/ridge_redux"]
 
 [workspace.package]
 version = "0.1.0"
