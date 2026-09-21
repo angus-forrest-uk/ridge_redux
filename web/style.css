@@ -1,24 +1,16 @@
-:root {
-  --bg: #191919;
-  --panel: #222222;
-  --panel2: #2b2b2b;
-  --text: #d8d4d8;
-  --muted: #8a868a;
-  --accent: #d78745;
-  --border: #3a3a3a;
-}
+/* Black on white, browser defaults otherwise. Only the artwork has colour. */
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 13px/1.45 system-ui, -apple-system, sans-serif;
+  background: #fff;
+  color: #000;
   height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  accent-color: #000;
 }
 
 header {
@@ -26,29 +18,25 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  border-bottom: 1px solid #000;
 }
 
-h1 {
-  font: 20px "Cinzel", serif;
-  margin: 0;
-  letter-spacing: 2px;
-}
-h1 span { color: var(--accent); }
+h1 { font-size: 20px; margin: 0; }
 
 .header-actions { display: flex; gap: 8px; align-items: center; }
 
 select, button, input, textarea {
-  background: var(--panel2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 8px;
+  background: #fff;
+  color: #000;
+  border: 1px solid #000;
+  border-radius: 0;
   font: inherit;
 }
-button { cursor: pointer; }
-button:hover { border-color: var(--accent); color: var(--accent); }
+button { cursor: pointer; padding: 2px 8px; }
+button:hover, button.active {
+  background: #000;
+  color: #fff;
+}
 
 main {
   display: flex;
@@ -60,109 +48,88 @@ main {
   flex: 1;
   position: relative;
   min-width: 0;
-  background: #101010;
 }
 
 #canvas { width: 100%; height: 100%; display: block; cursor: grab; }
 #canvas.dragging { cursor: grabbing; }
 
-#status {
+#status, #hint, #map-hint {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 2px 10px;
-  background: rgba(0,0,0,0.6);
-  border-radius: 10px;
-  font-size: 12px;
-  color: var(--muted);
+  padding: 1px 6px;
+  background: #fff;
+  color: #000;
+  border: 1px solid #000;
   pointer-events: none;
 }
-#status.busy { color: var(--accent); }
-
-#hint {
-  position: absolute;
-  bottom: 8px;
-  left: 8px;
-  padding: 2px 10px;
-  background: rgba(0,0,0,0.6);
-  border-radius: 10px;
-  font-size: 11px;
-  color: var(--muted);
-  pointer-events: none;
-}
+#status { top: 8px; left: 8px; }
+#status.busy { background: #000; color: #fff; }
+#hint { bottom: 8px; left: 8px; }
 
 #controls {
-  width: 300px;
+  flex: 0 0 300px;
   overflow-y: auto;
-  padding: 10px 12px 40px;
-  border-left: 1px solid var(--border);
-  background: var(--panel);
+  overflow-x: hidden;
+  padding: 8px 12px 40px;
+  border-left: 1px solid #000;
 }
 
 .section { margin-bottom: 14px; }
 .section h2 {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--muted);
+  font-size: 1em;
   margin: 0 0 6px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 3px;
+  border-bottom: 1px solid #000;
 }
 
 .row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
-.row label {
-  flex: 0 0 108px;
-  color: var(--muted);
-  font-size: 12px;
-}
+.row label { flex: 0 0 108px; }
+/* Inputs and selects default to their intrinsic width; let them shrink so
+   nothing pushes the sidebar wider than 300px. */
+.row > *, .check-row > * { min-width: 0; }
 .row input[type="number"] { width: 76px; }
+.row.bbox { flex-wrap: wrap; gap: 4px; }
+.row.bbox input { flex: 1 1 40%; width: auto; }
 .row input[type="text"], .row select { flex: 1; min-width: 0; }
 .row input[type="range"] { flex: 1; }
 .row .val {
   flex: 0 0 44px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
-  font-size: 12px;
 }
 .row input[type="color"] { flex: 1; height: 26px; padding: 1px; }
 textarea { width: 100%; resize: vertical; }
 
-.check-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-.check-row label { color: var(--muted); font-size: 12px; }
+.check-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 
-#controls {
-  width: 300px;
-  overflow-y: auto;
-  padding: 10px 12px 40px;
+#readme {
+  width: min(90ch, 92vw);
+  max-height: 88vh;
+  padding: 0;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
 }
+#readme::backdrop { background: rgba(0, 0, 0, 0.5); }
+#readme form { position: sticky; top: 0; text-align: right; padding: 6px; background: #fff; border-bottom: 1px solid #000; }
+#readme-text { margin: 0; padding: 12px 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* bottom map panel (collapsible) */
 #map-panel {
   flex: 0 0 auto;
-  border-top: 1px solid var(--border);
-  background: var(--panel);
+  border-top: 1px solid #000;
 }
 #map-panel.closed #map-body { display: none; }
 #map-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 16px;
+  padding: 4px 16px;
   cursor: pointer;
   user-select: none;
-}
-#map-panel-head span {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--muted);
 }
 #map-body {
   height: 300px;
@@ -171,30 +138,32 @@ textarea { width: 100%; resize: vertical; }
 #map {
   position: absolute;
   inset: 0;
-  background: #2b2b2b;
+  background: #fff;
 }
+#map .leaflet-tile-pane { filter: grayscale(1) contrast(1.2); }
+#map.select-mode { cursor: crosshair; }
 #map.leaflet-drawing { cursor: nwse-resize; }
-#map-hint {
+#map-tools {
   position: absolute;
+  top: 8px;
   right: 8px;
+  z-index: 500;
+  display: flex;
+}
+#map-tools button:last-child { border-left: none; }
+#map-hint {
+  left: 8px;
   bottom: 8px;
   z-index: 500;
-  font-size: 10px;
-  color: var(--muted);
-  background: rgba(0,0,0,0.55);
-  padding: 2px 8px;
-  border-radius: 8px;
-  pointer-events: none;
 }
 /* excluded latitudes (|lat| > 60: no SRTM data) */
 .excluded-zone {
   fill: #000;
-  fill-opacity: 0.55;
+  fill-opacity: 0.5;
   stroke: none;
 }
 .bbox-rect {
-  fill: #d78745;
-  fill-opacity: 0.08;
-  stroke: #d78745;
+  fill: none;
+  stroke: #000;
   stroke-width: 2;
 }

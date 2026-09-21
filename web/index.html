@@ -17,6 +17,7 @@
       <select id="preset"></select>
       <button id="export-svg" title="Download vector SVG">SVG</button>
       <button id="export-png" title="Rasterize to PNG">PNG</button>
+      <button id="readme-open" title="Show the README">README</button>
     </div>
   </header>
 
@@ -32,14 +33,23 @@
 
   <section id="map-panel">
     <div id="map-panel-head" title="click to collapse / expand">
-      <span>location map — drag to pick the area</span>
+      <span>location map — move to explore, select to pick the area</span>
       <button id="map-toggle">hide</button>
     </div>
     <div id="map-body">
       <div id="map"></div>
+      <div id="map-tools" role="group" aria-label="map tool">
+        <button id="map-tool-move" class="active" aria-pressed="true" title="Move: drag to pan the map">move</button>
+        <button id="map-tool-select" aria-pressed="false" title="Select: drag to draw the area (or hold Shift in move mode)">select</button>
+      </div>
       <div id="map-hint">gray = beyond SRTM coverage (±60° latitude) · tiles © OpenStreetMap</div>
     </div>
   </section>
+
+  <dialog id="readme">
+    <form method="dialog"><button>close</button></form>
+    <pre id="readme-text">loading…</pre>
+  </dialog>
 
   <script src="/vendor/leaflet.js"></script>
   <script src="/main.js"></script>

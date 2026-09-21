@@ -4,3 +4,4 @@ fixtures/srtm/
 *.hgt
 Cargo.lock.orig
 /ridge_map/
+scripts/node_modules/

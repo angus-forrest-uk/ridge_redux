@@ -77,6 +77,7 @@ function makeEl(tag) {
 }
 
 const controlsEl = makeEl("div");
+const elsById = {}; // stable per-id elements, so tests can click them
 const statusEl = makeEl("div");
 
 global.document = {
@@ -85,7 +86,7 @@ global.document = {
     if (id === "controls") return controlsEl;
     if (id === "status") return statusEl;
     if (id === "preset") { const e = makeEl("select"); e.addEventListener = () => {}; return e; }
-    return makeEl("div");
+    return (elsById[id] ??= makeEl("div"));
   },
   createElement: (tag) => makeEl(tag),
 };
@@ -95,12 +96,18 @@ const L = {
   __initCount: 0,
   map: () => {
     L.__initCount++;
-    const m = {
+    const m = L.__map = {
       on: (type, fn) => { mapStubHandlers[type] = fn; return m; },
       setView: () => m,
       fitBounds: () => m,
-      dragging: { enable: () => {}, disable: () => {} },
+      dragging: {
+        enabled: true,
+        enable: () => { m.dragging.enabled = true; },
+        disable: () => { m.dragging.enabled = false; },
+      },
       invalidateSize: () => {},
+      getSize: () => ({ x: 1200, y: 300 }),
+      setMinZoom: (z) => { m.minZoom = z; return m; },
     };
     return m;
   },
@@ -173,16 +180,34 @@ assert(true, "navigation handlers ran without throwing");
 
 // Map picker: initialized once, two exclusion zones + one bbox rectangle.
 assert(L.__initCount === 1, "map initialized exactly once");
+assert(L.__map.minZoom === 3, `map can't zoom out past one world width (minZoom ${L.__map.minZoom})`);
 assert(typeof mapStubHandlers.mousedown === "function"
      && typeof mapStubHandlers.mousemove === "function"
      && typeof mapStubHandlers.mouseup === "function",
      "map draw handlers registered");
+// Move is the default tool: a plain drag pans the map and selects nothing.
+mapStubHandlers.mousedown({ latlng: { lat: 44.0, lng: -71.5 } });
+mapStubHandlers.mouseup({ latlng: { lat: 44.5, lng: -70.9 } });
+await new Promise((r) => setTimeout(r, 500));
+assert(fetchCount === 2, `move-mode drag selects nothing (got ${fetchCount} fetches)`);
+assert(L.__map.dragging.enabled, "move mode leaves map panning on");
+// Shift-drag selects without leaving move mode.
+mapStubHandlers.mousedown({ latlng: { lat: 44.0, lng: -71.5 }, originalEvent: { shiftKey: true } });
+assert(!L.__map.dragging.enabled, "panning paused during a Shift-drag selection");
+mapStubHandlers.mouseup({ latlng: { lat: 44.5, lng: -70.8 } });
+await new Promise((r) => setTimeout(r, 500));
+assert(fetchCount === 3, `Shift-drag selects (got ${fetchCount} fetches)`);
+assert(L.__map.dragging.enabled, "panning restored after a Shift-drag selection");
+// Select tool: panning off, a plain drag draws.
+elsById["map-tool-select"].onclick();
+assert(!L.__map.dragging.enabled, "select mode turns map panning off");
 // Simulate a draw inside the SRTM band: still no extra fetches.
 mapStubHandlers.mousedown({ latlng: { lat: 44.0, lng: -71.5 } });
 mapStubHandlers.mousemove({ latlng: { lat: 44.5, lng: -70.9 } });
 mapStubHandlers.mouseup({ latlng: { lat: 44.5, lng: -70.9 } });
 await new Promise((r) => setTimeout(r, 500));
-assert(fetchCount === 3, `map draw triggers exactly one refetch (elevation+presets+draw = 3, got ${fetchCount})`);
+assert(fetchCount === 4, `map draw triggers exactly one refetch (elevation+presets+2 draws = 4, got ${fetchCount})`);
+assert(!L.__map.dragging.enabled, "select mode stays on after a draw");
 // Clamping: a drag reaching above 60N must be pulled back into coverage.
 mapStubHandlers.mousedown({ latlng: { lat: 58, lng: -71 } });
 mapStubHandlers.mouseup({ latlng: { lat: 70, lng: -70 } });
@@ -200,6 +225,8 @@ mapStubHandlers.mousedown({ latlng: { lat: -43.63036, lng: 172.633667 } });
 mapStubHandlers.mouseup({ latlng: { lat: -43.605256, lng: 172.670403 } });
 await new Promise((r) => setTimeout(r, 500));
 const nzReq = JSON.parse(fetchLog[fetchLog.length - 1].body);
+elsById["map-tool-move"].onclick();
+assert(L.__map.dragging.enabled, "back to move mode turns panning on");
 assert(
   Math.abs(nzReq.bbox[0] - 172.633667) < 1e-6,
   "NZ bbox sent as drawn",

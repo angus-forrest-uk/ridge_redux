@@ -819,6 +819,14 @@ pub async fn presets() -> Json<serde_json::Value> {
     Json(presets)
 }
 
+/// The project README, compiled in so the app can show it without the repo.
+const README: &str = include_str!("../../../README.md");
+
+/// `GET /api/readme` — the README as plain text, for the in-app modal.
+pub async fn readme() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], README)
+}
+
 pub async fn healthz(State(state): State<AppState>) -> Json<serde_json::Value> {
     let (hits, misses) = state.grid_cache.stats();
     Json(serde_json::json!({ "ok": true, "grid_cache": { "hits": hits, "misses": misses } }))

@@ -10,7 +10,19 @@
 > area on a map, rotate and restyle instantly, export SVG or PNG. One
 > `cargo install`.
 
-![White Mountains](examples/white_mountains.png)
+![The ridge-redux app: the artwork on the left, its controls on the right, the location map below](docs/screenshots/app.png)
+
+| Rotate and restyle, instantly | Pick the area on the map |
+|---|---|
+| ![Karwendelgebirge rotated to 30°](docs/screenshots/rotated.png) | ![Drawing a new area with the select tool](docs/screenshots/map-select.png) |
+| Presets, the viewpoint angle, water, relief and style all redraw in the browser as you drag. | **move** pans the map; **select** (or Shift-drag) draws the area to render. |
+
+<details>
+<summary>Every control</summary>
+
+![The control sidebar](docs/screenshots/controls.png)
+
+</details>
 
 ## Install
 
@@ -85,9 +97,10 @@ frames. Only changing the location or resolution hits the network.
 **Export**: `SVG` downloads vector artwork straight from the backend;
 `PNG` rasterizes it at 2× resolution in the browser.
 
-**Map picker**: the sidebar hosts an OpenStreetMap slippy map — drag on it
-to draw the bounding box, which syncs both ways with the coordinate inputs
-and presets. Areas beyond SRTM coverage (|φ| > 60°) are shaded out and
+**Map picker**: the bottom panel hosts an OpenStreetMap slippy map with two
+tools. **Move** (the default) drags to pan. **Select** drags to draw the
+bounding box, and holding Shift draws one without leaving Move. The box syncs
+both ways with the coordinate inputs and presets. Areas beyond SRTM coverage (|φ| > 60°) are shaded out and
 drawn selections are clamped to the covered band.
 
 **Rotation model** (all client-side, one elevation fetch): the backend ships
@@ -113,7 +126,8 @@ upstream README):
 |---|---|
 | ![Karwendelgebirge](examples/karwendelgebirge.png) | ![Hawaii](examples/hawaii.png) |
 | Karwendelgebirge (SRTM3 fallback) | Hawai'i, `ocean` colormap, `kind=elevation` |
-| ![Washington](examples/washington.png) | The default: The White Mountains |
+| ![Washington](examples/washington.png) | ![White Mountains](examples/white_mountains.png) |
+| Washington | The default: The White Mountains |
 
 You can also render headless with the CLI (great for piping to a file):
 
@@ -238,13 +252,14 @@ Development tasks are [`just`](https://github.com/casey/just) recipes
 ```bash
 just run          # app on localhost, serving web/ from disk (edits show on reload)
 just offline      # same, against the fixture tiles, with no network
-just test         # 43 Rust tests: 31 unit (incl. golden parity) + 12 API
+just test         # 44 Rust tests: 31 unit (incl. golden parity) + 13 API
 just test-web     # frontend logic + JS pipeline == Rust pipeline (bit-for-bit)
 just fixtures     # fetch the SRTM tiles for the golden parity test
 just fmt          # cargo fmt
 just clippy       # clippy, warnings are errors
 just ci           # everything CI runs: fmt-check, clippy, test, test-web
 just render --bbox "..." --out out.svg   # headless SVG render
+just screenshots  # regenerate docs/screenshots/ with Playwright (app must be running)
 ```
 
 Diagnostics that aren't recipes:

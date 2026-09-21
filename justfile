@@ -43,3 +43,8 @@ clippy:
 
 # Everything CI runs
 ci: fmt-check clippy test test-web
+
+# Regenerate the README screenshots (the app must be running; set BASE_URL / CHROMIUM_PATH as needed)
+screenshots:
+    npm install --silent --no-save --no-package-lock --prefix scripts playwright-core
+    node scripts/screenshots.mjs

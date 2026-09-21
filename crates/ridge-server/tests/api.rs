@@ -58,6 +58,19 @@ async fn healthz_ok() {
 }
 
 #[tokio::test]
+async fn readme_is_plain_text() {
+    let app = app_with_fresh_state();
+    let resp = app
+        .oneshot(Request::builder().uri("/api/readme").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers()["content-type"], "text/plain; charset=utf-8");
+    let text = String::from_utf8(body_bytes(resp).await).unwrap();
+    assert!(text.starts_with("# ridge-redux"));
+}
+
+#[tokio::test]
 async fn preview_returns_geometry() {
     let app = app_with_fresh_state();
     let (status, resp) = post(

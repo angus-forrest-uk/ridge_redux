@@ -552,7 +552,7 @@ function buildControls() {
   c.append(
     section(
       "location",
-      el("div", { class: "row", style: "flex-wrap:wrap; gap:4px" }, bboxInputs),
+      el("div", { class: "row bbox" }, bboxInputs),
       el("div", { class: "row" }, [el("label", {}, ["region"]), regionSel]),
       spanRow,
     ),
@@ -756,7 +756,7 @@ function draw() {
   const { width_px: fw, height_px: fh, axes } = scene.layout;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = "#101010";
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(view.scale, 0, 0, view.scale, view.tx, view.ty);
 
@@ -1041,6 +1041,22 @@ function triggerDownload(url, name) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+// ---------------------------------------------------------------- readme ---
+
+let readmeLoaded = false;
+$("readme-open").addEventListener("click", async () => {
+  $("readme").showModal();
+  if (readmeLoaded) return;
+  try {
+    const resp = await fetch("/api/readme");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    $("readme-text").textContent = await resp.text();
+    readmeLoaded = true;
+  } catch (err) {
+    $("readme-text").textContent = `could not load the README (${err.message})`;
+  }
+});
+
 // ------------------------------------------------------------ map picker --
 
 const SRTM_LAT_MAX = 60; // SRTM covers 60S..60N; the server rejects beyond it
@@ -1048,11 +1064,27 @@ const SRTM_LAT_MAX = 60; // SRTM covers 60S..60N; the server rejects beyond it
 let map = null;
 let mapRect = null;
 let mapDrawStart = null;
+let mapTool = "move"; // "move" pans the map; "select" drags out a new bbox
 
 function clampLat(v) { return Math.min(SRTM_LAT_MAX, Math.max(-SRTM_LAT_MAX, v)); }
 function clampLng(v) { return Math.min(180, Math.max(-180, v)); }
 function clampLL(ll) {
   return { lat: clampLat(ll.lat), lng: clampLng(ll.lng) };
+}
+
+/* Switch between panning the map and drawing a selection. */
+function setMapTool(tool) {
+  mapTool = tool;
+  for (const [id, t] of [["map-tool-move", "move"], ["map-tool-select", "select"]]) {
+    const btn = $(id);
+    btn.classList.toggle("active", t === tool);
+    btn.setAttribute("aria-pressed", String(t === tool));
+  }
+  $("map").classList.toggle("select-mode", tool === "select");
+  if (map && !mapDrawStart) {
+    if (tool === "select") map.dragging.disable();
+    else map.dragging.enable();
+  }
 }
 
 /* Keep the map rectangle in sync with params.bbox (no view jumps). */
@@ -1074,9 +1106,24 @@ function updateMapRect(fit = false) {
 function initMap() {
   if (typeof window.L === "undefined") return; // leaflet unavailable: inputs still work
   const container = $("map");
-  map = window.L.map(container, { worldCopyJump: true }).setView([44.1, -71.4], 5);
+  // A single copy of the world: no wrapping, and panning stops at its edges,
+  // so every point on the map is one real longitude for the selection.
+  const world = [[-90, -180], [90, 180]];
+  map = window.L.map(container, {
+    boxZoom: false,
+    maxBounds: world,
+    maxBoundsViscosity: 1,
+  }).setView([44.1, -71.4], 5);
+  // Never zoom out past the point where the world is narrower than the panel.
+  const fitWorldWidth = () => {
+    map.setMinZoom(Math.max(0, Math.ceil(Math.log2(map.getSize().x / 256))));
+  };
+  fitWorldWidth();
+  map.on("resize", fitWorldWidth);
   window.L
     .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      noWrap: true,
+      bounds: world,
       maxZoom: 13,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     })
@@ -1099,8 +1146,13 @@ function initMap() {
   ).addTo(map);
   updateMapRect(true);
 
-  // Drag-to-draw selection, latitude clamped to the SRTM range.
+  $("map-tool-move").addEventListener("click", () => setMapTool("move"));
+  $("map-tool-select").addEventListener("click", () => setMapTool("select"));
+
+  // Drag-to-draw selection in select mode (or Shift-drag in move mode),
+  // latitude clamped to the SRTM range. Leaflet's own Shift box-zoom is off.
   map.on("mousedown", (e) => {
+    if (mapTool !== "select" && !e.originalEvent?.shiftKey) return;
     mapDrawStart = clampLL(e.latlng);
     map.dragging.disable();
     container.classList?.add?.("leaflet-drawing");
@@ -1112,7 +1164,7 @@ function initMap() {
   });
   map.on("mouseup", (e) => {
     if (!mapDrawStart) return;
-    map.dragging.enable();
+    if (mapTool === "move") map.dragging.enable();
     container.classList?.remove?.("leaflet-drawing");
     const a = mapDrawStart;
     const b = clampLL(e.latlng);
