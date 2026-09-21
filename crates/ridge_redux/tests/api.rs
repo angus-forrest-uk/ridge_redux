@@ -27,7 +27,7 @@ fn web_dir() -> std::path::PathBuf {
 fn fixture_config() -> ServerConfig {
     let dir = std::path::Path::new("../../fixtures/srtm").canonicalize();
     ServerConfig {
-        addr: "127.0.0.1:0".parse().unwrap(),
+        addr: Some("127.0.0.1:0".parse().unwrap()),
         web_dir: Some(web_dir()),
         srtm_base: "http://127.0.0.1:1/invalid/".into(), // must never be hit
         cache_dir: std::env::temp_dir().join("ridge-test-cache"),

@@ -19,7 +19,8 @@ use tower_http::trace::TraceLayer;
 
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
-    pub addr: SocketAddr,
+    /// Where to listen. None: 127.0.0.1:8420, or any free port if that's taken.
+    pub addr: Option<SocketAddr>,
     /// Serve the frontend from this directory instead of the embedded copy.
     pub web_dir: Option<PathBuf>,
     pub srtm_base: String,
@@ -42,7 +43,7 @@ fn default_cache_dir() -> PathBuf {
 
 impl ServerConfig {
     pub fn from_env_and_args() -> ServerConfig {
-        let mut addr = SocketAddr::from(([127, 0, 0, 1], 8420));
+        let mut addr = None;
         let mut web_dir = None;
         let mut srtm_base =
             "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".to_string();
@@ -54,7 +55,7 @@ impl ServerConfig {
         while let Some(arg) = args.next() {
             let mut val = || args.next().expect("missing value");
             match arg.as_str() {
-                "--addr" => addr = val().parse().expect("bad --addr"),
+                "--addr" => addr = Some(val().parse().expect("bad --addr")),
                 "--web-dir" => web_dir = Some(PathBuf::from(val())),
                 "--srtm-base" => srtm_base = val(),
                 "--cache-dir" => cache_dir = PathBuf::from(val()),
@@ -100,9 +101,17 @@ pub async fn run() {
     if let Some(dir) = &config.web_dir {
         tracing::info!("serving the frontend from {}", dir.display());
     }
-    let listener = tokio::net::TcpListener::bind(config.addr)
-        .await
-        .expect("failed to bind");
+    let listener = match config.addr {
+        Some(addr) => tokio::net::TcpListener::bind(addr)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("ridge_redux: can't listen on {addr}: {e}");
+                std::process::exit(1);
+            }),
+        None => bind_preferring(DEFAULT_ADDR)
+            .await
+            .expect("no free port on 127.0.0.1"),
+    };
     let url = format!("http://{}", listener.local_addr().expect("bound address"));
     println!("ridge_redux running at {url}");
     if config.open_browser {
@@ -111,6 +120,21 @@ pub async fn run() {
         }
     }
     axum::serve(listener, app).await.expect("server error");
+}
+
+const DEFAULT_ADDR: SocketAddr =
+    SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 8420);
+
+/// Listen on `preferred`, or on a free port of the same host if it's taken
+/// (another ridge_redux, say), rather than failing to start.
+async fn bind_preferring(preferred: SocketAddr) -> std::io::Result<tokio::net::TcpListener> {
+    match tokio::net::TcpListener::bind(preferred).await {
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            tracing::info!("port {} is in use; using a free one", preferred.port());
+            tokio::net::TcpListener::bind(SocketAddr::new(preferred.ip(), 0)).await
+        }
+        result => result,
+    }
 }
 
 /// Build the full app router (separated for integration tests).
@@ -131,4 +155,28 @@ pub fn build_router(state: state::AppState, config: &ServerConfig) -> Router {
     app.layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn busy_port_falls_back_to_a_free_one() {
+        let taken = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let busy = taken.local_addr().unwrap();
+        let listener = bind_preferring(busy).await.unwrap();
+        let got = listener.local_addr().unwrap();
+        assert_eq!(got.ip(), busy.ip());
+        assert_ne!(got.port(), busy.port());
+    }
+
+    #[tokio::test]
+    async fn free_port_is_used_as_asked() {
+        let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let free = probe.local_addr().unwrap();
+        drop(probe);
+        let listener = bind_preferring(free).await.unwrap();
+        assert_eq!(listener.local_addr().unwrap(), free);
+    }
 }
