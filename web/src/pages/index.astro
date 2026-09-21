@@ -1,0 +1,23 @@
+---
+import App from "../components/App.tsx";
+import "../styles/global.css";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><style>path{fill:%23000}@media (prefers-color-scheme:dark){path{fill:%23fff}}</style><path d='M50 8 92 92H8Z'/></svg>"
+    />
+    <title>ridge-redux: ridgeline terrain art</title>
+    <!-- Cinzel is the artwork's label font, not the UI's. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <App client:only="solid-js" />
+  </body>
+</html>

@@ -26,7 +26,9 @@
 
 ## Install
 
-The only prerequisite is a Rust toolchain ([rustup.rs](https://rustup.rs)).
+From crates.io, the only prerequisite is a Rust toolchain
+([rustup.rs](https://rustup.rs)). From source you also need Node.js 22 or
+later, to build the frontend.
 
 **From crates.io**
 
@@ -41,6 +43,7 @@ ridge_redux
 ```bash
 git clone https://github.com/angus-forrest-uk/ridge_redux
 cd ridge_redux
+npm --prefix web ci && npm --prefix web run build   # frontend -> web/dist
 cargo run --release
 # open http://127.0.0.1:8420
 ```
@@ -160,11 +163,12 @@ water percentile, annotations, …).
 │ └─ colormaps + SVG writer                                          │
 └────────────────────────────┬───────────────────────────────────────┘
                              │ raw grid (integers, voids→null), JSON geometry
-┌────────────────────────────▼── frontend (vanilla JS canvas) ───────┐
+┌────────────────────────────▼── frontend (Astro + SolidJS) ─────────┐
 │ ONE fetch per location/resolution, then everything is local:       │
 │ ├─ rotatePlane(): spin the grid about its center (fixed canvas)    │
-│ ├─ preprocessLocal(): water percentile + lake gradient masks       │
+│ ├─ preprocessGrid(): water percentile + lake gradient masks        │
 │ ├─ rows + matplotlib-parity layout, drawn back-to-front            │
+│ ├─ Solid memos: only location/resolution changes refetch           │
 │ └─ pan/zoom = view transform; angle slider runs at frame rate      │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -173,9 +177,9 @@ Division of labor: the server owns anything that needs tiles or
 authoritative export (sampling, SVG). The browser owns everything
 per-interactive-frame: rotation about the landscape center (the plane never
 moves, so zoom/distance stay fixed), water/lake masking, and drawing. A
-parity test (`scripts/parity_frontend.mjs`) proves the JS pipeline matches
-the Rust one bit-for-bit (worst delta 0.0 on a rotated fixture). No WASM:
-a 300×300 grid pipelines in a few milliseconds of plain JS; if you ever
+parity test (`web/test/parity.test.ts`) proves the TypeScript pipeline
+matches the Rust one bit-for-bit (worst delta 0.0 on a rotated fixture). No
+WASM: a 300×300 grid pipelines in a few milliseconds of plain TypeScript; if you ever
 want 1000×1000 at frame rate, `ridge-core` is structured to compile to WASM
 via wasm-bindgen and drop in.
 
@@ -250,14 +254,17 @@ Development tasks are [`just`](https://github.com/casey/just) recipes
 (`cargo install just`, or your package manager). Run `just` to list them.
 
 ```bash
-just run          # app on localhost, serving web/ from disk (edits show on reload)
+just web          # build the frontend (web/: Astro + SolidJS) into web/dist
+just run          # build the frontend, then serve the app on localhost
 just offline      # same, against the fixture tiles, with no network
+just web-dev      # frontend dev server with live reload on :4321 (API from `just run`)
 just test         # 44 Rust tests: 31 unit (incl. golden parity) + 13 API
-just test-web     # frontend logic + JS pipeline == Rust pipeline (bit-for-bit)
+just test-web     # Vitest: app state + TS pipeline == Rust pipeline (bit-for-bit)
+just check-web    # type-check the frontend
 just fixtures     # fetch the SRTM tiles for the golden parity test
 just fmt          # cargo fmt
 just clippy       # clippy, warnings are errors
-just ci           # everything CI runs: fmt-check, clippy, test, test-web
+just ci           # everything CI runs: fmt-check, clippy, test, check-web, test-web
 just render --bbox "..." --out out.svg   # headless SVG render
 just screenshots  # regenerate docs/screenshots/ with Playwright (app must be running)
 ```

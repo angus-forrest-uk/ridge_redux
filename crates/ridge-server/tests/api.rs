@@ -7,11 +7,24 @@ use tower::ServiceExt; // oneshot
 
 use ridge_server::{build_router, state::AppState, ServerConfig};
 
+/// A stand-in for the built frontend (web/dist), so these tests don't need
+/// the Node build.
+fn web_dir() -> std::path::PathBuf {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = std::env::temp_dir().join("ridge-test-web");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("index.html"), "<!doctype html><title>ridge-redux</title>").unwrap();
+        dir
+    })
+    .clone()
+}
+
 fn fixture_config() -> ServerConfig {
     let dir = std::path::Path::new("../../fixtures/srtm").canonicalize();
     ServerConfig {
         addr: "127.0.0.1:0".parse().unwrap(),
-        web_dir: std::path::PathBuf::from("../../web"),
+        web_dir: web_dir(),
         srtm_base: "http://127.0.0.1:1/invalid/".into(), // must never be hit
         cache_dir: std::env::temp_dir().join("ridge-test-cache"),
         fixture_dir: dir.ok(),

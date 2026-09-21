@@ -39,7 +39,7 @@ fn default_cache_dir() -> PathBuf {
 impl ServerConfig {
     pub fn from_env_and_args() -> ServerConfig {
         let mut addr = SocketAddr::from(([127, 0, 0, 1], 8420));
-        let mut web_dir = PathBuf::from("web");
+        let mut web_dir = PathBuf::from("web/dist");
         let mut srtm_base = "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".to_string();
         let mut cache_dir = default_cache_dir();
         let mut fixture_dir = None;

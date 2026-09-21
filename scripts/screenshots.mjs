@@ -14,12 +14,13 @@ mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+page.on("pageerror", (err) => console.error("page error:", err.message));
 
 /* Wait until the elevation fetch is done and the canvas has been drawn. */
 async function settled() {
   await page.waitForFunction(() => {
-    const s = document.getElementById("status");
-    return !s.classList.contains("busy") && /ms/.test(s.textContent);
+    const s = document.getElementById("status"); // absent until the app mounts
+    return s && !s.classList.contains("busy") && /ms/.test(s.textContent);
   }, null, { timeout: 120_000 });
   await page.waitForTimeout(500); // let the map finish panning to the new area
   await page.waitForFunction(() => {
@@ -37,11 +38,9 @@ async function setSlider(label, value) {
   }, String(value));
 }
 
-/* Load the label font, then nudge a slider so the canvas redraws with it. */
+/* Wait for the label font; the app redraws once it has loaded. */
 async function withFonts() {
   await page.evaluate(() => document.fonts.load('60px "Cinzel"'));
-  await setSlider("angle (deg)", await page.locator(".row", { has: page.locator("label", { hasText: "angle (deg)" }) })
-    .locator('input[type="range"]').inputValue());
   await page.waitForTimeout(300);
 }
 

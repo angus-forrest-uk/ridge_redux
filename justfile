@@ -4,13 +4,23 @@
 default:
     @just --list
 
-# Run the app on localhost, serving web/ from disk so frontend edits show on reload
-run *args:
-    cargo run --release -p ridge-server -- --web-dir web {{args}}
+# Build the frontend (web/, Astro + Solid) into web/dist, which the server serves
+web:
+    npm --prefix web install --silent
+    npm --prefix web run build
 
-# Run the app offline against the fixture tiles (fetch them first with `just fixtures`)
-offline: fixtures
-    cargo run --release -p ridge-server -- --web-dir web --fixture-dir fixtures/srtm
+# Build the frontend, then run the app on localhost
+run *args: web
+    cargo run --release -p ridge-server -- {{args}}
+
+# Run the app offline against the fixture tiles
+offline: web fixtures
+    cargo run --release -p ridge-server -- --fixture-dir fixtures/srtm
+
+# Frontend dev server with live reload on :4321; its API calls go to `just run` on :8420
+web-dev:
+    npm --prefix web install --silent
+    npm --prefix web run dev
 
 # Render headless to SVG, e.g. `just render --bbox "..." --out out.svg`
 render *args:
@@ -24,10 +34,16 @@ fixtures:
 test:
     cargo test --workspace --release
 
-# Frontend logic and JS/Rust pipeline parity
+# Frontend tests: app state, and the TS pipeline against the Rust one (bit-for-bit)
 test-web:
-    node scripts/test_frontend.mjs
-    node scripts/parity_frontend.mjs
+    cargo run --release -q -p ridge-core --example dump_plane_fixture
+    npm --prefix web install --silent
+    npm --prefix web test
+
+# Type-check the frontend
+check-web:
+    npm --prefix web install --silent
+    npm --prefix web run check
 
 # Format the code
 fmt:
@@ -42,7 +58,7 @@ clippy:
     cargo clippy --workspace --all-targets -- -D warnings
 
 # Everything CI runs
-ci: fmt-check clippy test test-web
+ci: fmt-check clippy test check-web test-web
 
 # Regenerate the README screenshots (the app must be running; set BASE_URL / CHROMIUM_PATH as needed)
 screenshots:
