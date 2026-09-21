@@ -1,0 +1,21 @@
+[package]
+name = "ridge-core"
+description = "Ridgeline terrain art pipeline: SRTM fetch, preprocess, geometry, SVG"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ndarray = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+flate2 = { workspace = true }
+colorous = { workspace = true }
+ureq = { version = "2", default-features = false, features = ["tls", "gzip"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[[bin]]
+name = "render"
+path = "src/bin/render.rs"

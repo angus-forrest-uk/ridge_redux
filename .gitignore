@@ -1,0 +1,6 @@
+/target
+**/target
+fixtures/srtm/
+*.hgt
+Cargo.lock.orig
+/ridge_map/

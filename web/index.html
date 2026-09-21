@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9968;</text></svg>" />
+  <title>ridge-redux — ridgeline terrain art</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/vendor/leaflet.css" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>ridge<span>-redux</span></h1>
+    <div class="header-actions">
+      <select id="preset"></select>
+      <button id="export-svg" title="Download vector SVG">SVG</button>
+      <button id="export-png" title="Rasterize to PNG">PNG</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="stage">
+      <canvas id="canvas"></canvas>
+      <div id="status">ready</div>
+      <div id="hint">drag to pan · wheel to zoom · double-click to reset</div>
+    </div>
+
+    <aside id="controls"></aside>
+  </main>
+
+  <section id="map-panel">
+    <div id="map-panel-head" title="click to collapse / expand">
+      <span>location map — drag to pick the area</span>
+      <button id="map-toggle">hide</button>
+    </div>
+    <div id="map-body">
+      <div id="map"></div>
+      <div id="map-hint">gray = beyond SRTM coverage (±60° latitude) · tiles © OpenStreetMap</div>
+    </div>
+  </section>
+
+  <script src="/vendor/leaflet.js"></script>
+  <script src="/main.js"></script>
+</body>
+</html>
