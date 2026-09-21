@@ -1,6 +1,7 @@
-//! Choose the frontend to embed: the crate's own `dist/` (a published crate
-//! ships one), the workspace's `web/dist` (a local `just web` build), or a
-//! placeholder page, so building the Rust never needs Node.
+//! Choose the frontend to embed: the workspace's `web/dist` (a local
+//! `just web` build), else the crate's own `dist/` (a published crate ships
+//! one, and has no workspace around it), else a placeholder page, so
+//! building the Rust never needs Node. Likewise the README the app shows.
 
 use std::path::{Path, PathBuf};
 
@@ -18,7 +19,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", packaged.display());
     println!("cargo:rerun-if-changed={}", workspace.display());
 
-    let dir = [&packaged, &workspace]
+    let dir = [&workspace, &packaged]
         .into_iter()
         .find(|d| d.join("index.html").is_file())
         .cloned()
@@ -34,6 +35,16 @@ fn main() {
     println!(
         "cargo:rustc-env=RIDGE_FRONTEND_DIR={}",
         canonical(&dir).display()
+    );
+
+    let readme = [manifest.join("../../README.md"), manifest.join("README.md")]
+        .into_iter()
+        .find(|p| p.is_file())
+        .expect("README.md not found");
+    println!("cargo:rerun-if-changed={}", readme.display());
+    println!(
+        "cargo:rustc-env=RIDGE_README={}",
+        canonical(&readme).display()
     );
 }
 

@@ -849,7 +849,7 @@ pub async fn presets() -> Json<serde_json::Value> {
 }
 
 /// The project README, compiled in so the app can show it without the repo.
-const README: &str = include_str!("../../../README.md");
+const README: &str = include_str!(env!("RIDGE_README"));
 
 /// `GET /api/readme` — the README as plain text, for the in-app modal.
 pub async fn readme() -> impl IntoResponse {

@@ -5,3 +5,5 @@ fixtures/srtm/
 Cargo.lock.orig
 /ridge_map/
 scripts/node_modules/
+/crates/ridge_redux/dist/
+/crates/ridge_redux/dist/

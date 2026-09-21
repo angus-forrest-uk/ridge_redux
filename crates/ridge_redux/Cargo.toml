@@ -4,13 +4,20 @@ description = "Interactive ridgeline maps of real terrain, as a local web app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme.workspace = true
+categories.workspace = true
+keywords = ["ridgeline", "terrain", "map", "srtm", "art"]
+# dist/ is the built frontend, copied in by `just package` (it's gitignored).
+include = ["src/**/*", "build.rs", "dist/**/*", "LICENSE", "LICENSE-upstream"]
 
 [[bin]]
 name = "ridge_redux"
 path = "src/main.rs"
 
 [dependencies]
-ridge-core = { path = "../ridge-core" }
+ridge-core = { path = "../ridge-core", version = "0.1.0" }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 tower-http = { version = "0.6", features = ["fs", "compression-gzip", "trace", "cors"] }
