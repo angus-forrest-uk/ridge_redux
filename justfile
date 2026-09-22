@@ -40,6 +40,12 @@ render *args:
 fixtures:
     scripts/fetch_fixtures.sh
 
+# Regenerate the Python-reference parity fixtures for the frozen ports in
+# crates/ridge-core/src/upstream (needs nix flakes + uv; not needed to *run*
+# the tests, which just read the committed fixtures/parity/*.json).
+fixtures-parity:
+    nix develop -c sh -c 'cd scripts && uv sync && uv run gen_parity_fixtures.py'
+
 # Rust tests: unit, API integration and the golden upstream parity test
 test:
     cargo test --workspace --release

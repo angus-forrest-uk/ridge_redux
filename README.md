@@ -265,6 +265,15 @@ The golden test compares our sampled White Mountains grid against the upstream
 test fixture ([`test/test_data/new_hampshire.npz`](https://github.com/ColCarroll/ridge_map/tree/main/test/test_data)): **0/24000
 mismatches**, i.e. bit-for-bit identical sampling to Python + srtm.py.
 
+The re-implemented reference algorithms (`scipy.ndimage.rotate`,
+`numpy.percentile`, `skimage.filters.rank.gradient`) are collected in
+[`crates/ridge-core/src/upstream/`](https://github.com/angus-forrest-uk/ridge_redux/tree/main/crates/ridge-core/src/upstream)
+and treated as frozen. They are pinned by fixtures emitted from those libraries
+themselves (`fixtures/parity/*.json` via `scripts/gen_parity_fixtures.py`;
+regenerate with `just fixtures-parity`) and asserted by
+`crates/ridge-core/tests/parity.rs`, so a regression fails the build instead of
+quietly changing the artwork.
+
 ## Development
 
 Development tasks are [`just`](https://github.com/casey/just) recipes
