@@ -53,10 +53,11 @@ export function rotatePlane(src: Float64Array, nrows: number, ncols: number, ang
     for (let col = 0; col < ncols; col++) {
       const pr = c * dr + s * (col - cc) + cr;
       const pc = -s * dr + c * (col - cc) + cc;
+      // scipy/ridge-core constant mode: the coordinate must lie within
+      // [0, n-1]; anything outside is a gap, even if it would round in-range.
+      if (pr < 0 || pc < 0 || pr > nrows - 1 || pc > ncols - 1) continue;
       const sr = Math.floor(pr + 0.5), sc = Math.floor(pc + 0.5);
-      if (sr >= 0 && sr < nrows && sc >= 0 && sc < ncols) {
-        out[r * ncols + col] = src[sr * ncols + sc];
-      }
+      out[r * ncols + col] = src[sr * ncols + sc];
     }
   }
   return out;

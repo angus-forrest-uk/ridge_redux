@@ -96,12 +96,18 @@ pub fn rotate(input: &Array2<f64>, angle_deg: f64, reshape: bool, order: u32) ->
 }
 
 pub(crate) fn sample_nearest(input: &Array2<f64>, pr: f64, pc: f64, fill: f64) -> f64 {
-    let r = (pr + 0.5).floor(); // scipy order-0: round half up
-    let c = (pc + 0.5).floor();
-    if r < 0.0 || c < 0.0 || r as usize >= input.nrows() || c as usize >= input.ncols() {
+    // scipy mode='constant': the *coordinate* must lie within [0, n-1]; anything
+    // outside is `cval`, even when it would round to an in-range cell (e.g.
+    // -0.1 or 3.1 for a length-4 axis). Checking the rounded index instead
+    // samples the edge cell where scipy returns cval.
+    let max_r = input.nrows() as f64 - 1.0;
+    let max_c = input.ncols() as f64 - 1.0;
+    if pr < 0.0 || pc < 0.0 || pr > max_r || pc > max_c {
         return fill;
     }
-    input[(r as usize, c as usize)]
+    let r = (pr + 0.5).floor() as usize; // scipy order-0: round half up
+    let c = (pc + 0.5).floor() as usize;
+    input[(r, c)]
 }
 
 pub(crate) fn sample_bilinear(input: &Array2<f64>, pr: f64, pc: f64, fill: f64) -> f64 {
@@ -146,20 +152,15 @@ mod tests {
 
     #[test]
     fn crop_keeps_shape_and_zeroes_outside() {
+        // Ground truth from scipy itself:
+        //   ndimage.rotate(u, 45, reshape=False, order=0, mode='constant', cval=0.0)
+        //   -> [[0, 0], [4, 0], [0, 6], [0, 0]]
+        // Note (0,0) and (3,1) map to coordinates just outside [0, n-1], so
+        // scipy returns cval there rather than the nearest edge cell.
         let a = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]];
         let out = rotate(&a, 45.0, false, 0);
         assert_eq!(out.dim(), (4, 2));
-        // Hand-computed nearest mappings:
-        //   out(0,0) -> input (0.086, 1.207) -> (0, 1) = 2
-        //   out(0,1) -> input (0.793, 1.914) -> (1, 2) out of bounds -> 0
-        //   out(3,0) -> input (2.207, -0.914) -> c rounds to -1 -> 0
-        //   out(3,1) -> input (2.914, -0.207) -> (3, 0) = 7
-        assert_eq!(out[(0, 0)], 2.0);
-        assert_eq!(out[(0, 1)], 0.0);
-        assert_eq!(out[(3, 0)], 0.0);
-        assert_eq!(out[(3, 1)], 7.0);
-        // An interior cell well away from rounding boundaries.
-        assert_eq!(out[(2, 1)], 6.0);
+        assert_eq!(out, array![[0.0, 0.0], [4.0, 0.0], [0.0, 6.0], [0.0, 0.0]]);
     }
 
     #[test]
