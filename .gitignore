@@ -9,3 +9,12 @@ scripts/node_modules/
 /crates/ridge_redux/dist/
 /coverage.json
 /badge/
+
+# Python reference env for fixture generation (see scripts/gen_parity_fixtures.py)
+scripts/.venv/
+scripts/__pycache__/
+*.pyc
+
+# Nix
+/.direnv/
+/result

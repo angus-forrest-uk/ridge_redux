@@ -1,0 +1,10 @@
+[project]
+name = "ridge-parity-fixtures"
+version = "0.0.0"
+description = "Generates the Python reference fixtures that ridge-core's frozen ports (upstream/) are tested against"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-image",
+]
