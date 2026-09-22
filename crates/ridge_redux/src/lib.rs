@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 use axum::routing::{get, post};
 use axum::Router;
+use clap::Parser;
 use tower_http::compression::CompressionLayer;
 use tower_http::trace::TraceLayer;
 
@@ -29,6 +30,40 @@ pub struct ServerConfig {
     pub fixture_dir: Option<PathBuf>,
     /// Open the app in the default browser once it's listening.
     pub open_browser: bool,
+    /// Load the default scene's elevation before offering the URL, so the
+    /// first page load doesn't wait on the tile fetch.
+    pub prefetch: bool,
+}
+
+/// Interactive ridgeline maps of real terrain, as a local web app.
+#[derive(Parser, Debug)]
+#[command(name = "ridge_redux", version, about)]
+struct Cli {
+    /// Address to listen on [default: 127.0.0.1:8420, or a free port if taken]
+    #[arg(long, value_name = "IP:PORT")]
+    addr: Option<SocketAddr>,
+    /// Don't open the app in the default browser
+    #[arg(long)]
+    no_open: bool,
+    /// Don't load the default scene (the White Mountains) before starting
+    #[arg(long)]
+    no_prefetch: bool,
+    /// Serve the frontend from this directory instead of the embedded copy
+    #[arg(long, value_name = "DIR")]
+    web_dir: Option<PathBuf>,
+    /// Comma-separated SRTM mirror base URLs, tried in order
+    #[arg(
+        long,
+        value_name = "URL",
+        default_value = "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/"
+    )]
+    srtm_base: String,
+    /// Where downloaded tiles are kept [default: $XDG_CACHE_HOME/ridge-redux/srtm]
+    #[arg(long, value_name = "DIR")]
+    cache_dir: Option<PathBuf>,
+    /// Serve tiles from this directory instead of the network (offline/demo mode)
+    #[arg(long, value_name = "DIR")]
+    fixture_dir: Option<PathBuf>,
 }
 
 fn default_cache_dir() -> PathBuf {
@@ -43,44 +78,15 @@ fn default_cache_dir() -> PathBuf {
 
 impl ServerConfig {
     pub fn from_env_and_args() -> ServerConfig {
-        let mut addr = None;
-        let mut web_dir = None;
-        let mut srtm_base =
-            "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".to_string();
-        let mut cache_dir = default_cache_dir();
-        let mut fixture_dir = None;
-        let mut open_browser = true;
-
-        let mut args = std::env::args().skip(1);
-        while let Some(arg) = args.next() {
-            let mut val = || args.next().expect("missing value");
-            match arg.as_str() {
-                "--addr" => addr = Some(val().parse().expect("bad --addr")),
-                "--web-dir" => web_dir = Some(PathBuf::from(val())),
-                "--srtm-base" => srtm_base = val(),
-                "--cache-dir" => cache_dir = PathBuf::from(val()),
-                "--fixture-dir" => fixture_dir = Some(PathBuf::from(val())),
-                "--no-open" => open_browser = false,
-                "--help" => {
-                    println!(
-                        "ridge_redux [--addr IP:PORT] [--no-open] [--web-dir DIR] [--srtm-base URL] \
-                         [--cache-dir DIR] [--fixture-dir DIR]"
-                    );
-                    std::process::exit(0);
-                }
-                other => {
-                    eprintln!("unknown argument {other:?}");
-                    std::process::exit(2);
-                }
-            }
-        }
+        let cli = Cli::parse();
         ServerConfig {
-            addr,
-            web_dir,
-            srtm_base,
-            cache_dir,
-            fixture_dir,
-            open_browser,
+            addr: cli.addr,
+            web_dir: cli.web_dir,
+            srtm_base: cli.srtm_base,
+            cache_dir: cli.cache_dir.unwrap_or_else(default_cache_dir),
+            fixture_dir: cli.fixture_dir,
+            open_browser: !cli.no_open,
+            prefetch: !cli.no_prefetch,
         }
     }
 }
@@ -96,7 +102,7 @@ pub async fn run() {
     let config = ServerConfig::from_env_and_args();
     let state = state::AppState::new(&config);
 
-    let app = build_router(state, &config);
+    let app = build_router(state.clone(), &config);
 
     if let Some(dir) = &config.web_dir {
         tracing::info!("serving the frontend from {}", dir.display());
@@ -112,6 +118,11 @@ pub async fn run() {
             .await
             .expect("no free port on 127.0.0.1"),
     };
+    // Bound but not yet announced: connections queue until we serve, and
+    // the browser isn't pointed here until the default scene is cached.
+    if config.prefetch {
+        api::prefetch_default_scene(&state).await;
+    }
     let url = format!("http://{}", listener.local_addr().expect("bound address"));
     println!("ridge_redux running at {url}");
     if config.open_browser {
@@ -160,6 +171,12 @@ pub fn build_router(state: state::AppState, config: &ServerConfig) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cli_is_well_formed() {
+        use clap::CommandFactory;
+        Cli::command().debug_assert();
+    }
 
     #[tokio::test]
     async fn busy_port_falls_back_to_a_free_one() {

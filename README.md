@@ -287,6 +287,9 @@ cargo run -p ridge-core --example dump_plane_fixture  # fixture for the parity c
   serves the frontend from disk instead.
 - The app opens in your default browser on start; `--no-open` skips that
   (for headless machines and scripts).
+- Before it prints the URL, the server loads the default scene (the White
+  Mountains) so the first page load doesn't wait on SRTM tiles;
+  `--no-prefetch` skips that. `ridge_redux --help` lists every option.
 - Offline/demo mode: `--fixture-dir fixtures/srtm` (server) or
   `--fixture-dir` + `DirSource` in code.
 - Mirrors are configurable: `--srtm-base "URL1,URL2"` (default: kurviger

@@ -33,6 +33,7 @@ fn fixture_config() -> ServerConfig {
         cache_dir: std::env::temp_dir().join("ridge-test-cache"),
         fixture_dir: dir.ok(),
         open_browser: false,
+        prefetch: false,
     }
 }
 
@@ -141,6 +142,31 @@ async fn repeat_preview_hits_grid_cache() {
         (hits, misses),
         (1, 1),
         "second identical request should hit the cache"
+    );
+}
+
+#[tokio::test]
+async fn prefetch_makes_first_load_a_cache_hit() {
+    let config = fixture_config();
+    let state = AppState::new(&config);
+    ridge_redux::api::prefetch_default_scene(&state).await;
+    let app = build_router(state.clone(), &config);
+    // What the frontend sends on a fresh load (DEFAULTS, span_deg resolved
+    // by withSpan to the bbox diagonal at 4 decimals).
+    let body = json!({
+        "bbox": [-71.928864, 43.758201, -70.957947, 44.465151],
+        "num_lines": 80,
+        "elevation_pts": 300,
+        "region": "rect",
+        "span_deg": 1.201,
+    })
+    .to_string();
+    let (status, _) = post(app, "/api/elevation", body).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        state.grid_cache.stats(),
+        (1, 1),
+        "the prefetch misses once, the first load hits"
     );
 }
 

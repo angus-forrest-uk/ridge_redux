@@ -751,10 +751,20 @@ pub async fn elevation(
     if !bbox.is_valid() {
         return Err(ApiError::bad_request("invalid bbox"));
     }
+    let grid = load_elevation(&state, &params).await?;
+    Ok(Json(elevation_response(&grid, &params)))
+}
+
+/// The sampled grid for `params`, from the cache or the tile source.
+async fn load_elevation(
+    state: &AppState,
+    params: &ElevationParams,
+) -> Result<Arc<ndarray::Array2<f64>>, ApiError> {
     let key = params.cache_key();
     if let Some(grid) = state.grid_cache.get(key) {
-        return Ok(Json(elevation_response(&grid, &params)));
+        return Ok(grid);
     }
+    let bbox = params.bbox_struct();
     let source = state.source.clone();
     let n = params.underlying_n();
     let span = params.span();
@@ -777,7 +787,31 @@ pub async fn elevation(
     }
     let grid = Arc::new(grid);
     state.grid_cache.insert(key, grid.clone());
-    Ok(Json(elevation_response(&grid, &params)))
+    Ok(grid)
+}
+
+/// The `/api/elevation` request the frontend makes on a fresh load (the
+/// White Mountains): its defaults, with `span_deg` resolved to the bbox
+/// diagonal at 4 decimals as `withSpan` in web/src/state.ts does. It must
+/// match that request exactly, or its cache key won't.
+fn default_scene_request() -> ElevationParams {
+    let mut params = ElevationParams::default();
+    let b = params.bbox_struct();
+    let diagonal = (b.lon1 - b.lon0).hypot(b.lat1 - b.lat0);
+    params.span_deg = format!("{diagonal:.4}").parse().expect("formatted f64");
+    params
+}
+
+/// Fetch and cache the default scene's elevation, so the browser's first
+/// load is a cache hit. Failures are logged, not fatal: the page will just
+/// fetch it itself.
+pub async fn prefetch_default_scene(state: &AppState) {
+    tracing::info!("prefetching the default scene (the White Mountains)");
+    let started = std::time::Instant::now();
+    match load_elevation(state, &default_scene_request()).await {
+        Ok(_) => tracing::info!("default scene ready in {:.1?}", started.elapsed()),
+        Err(e) => tracing::warn!("couldn't prefetch the default scene: {}", e.message),
+    }
 }
 
 /// Elevation payload + the display-window spec. The window MUST be present
