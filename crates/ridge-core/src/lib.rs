@@ -14,6 +14,9 @@ pub mod preprocess;
 pub mod rotate;
 pub mod srtm;
 pub mod svg;
+/// Frozen ports of the reference implementations (scipy/numpy/skimage). Do
+/// not edit; see the module docs.
+pub mod upstream;
 
 pub use geometry::{RidgeRow, RidgeScene};
 pub use srtm::{Tile, TileSource};

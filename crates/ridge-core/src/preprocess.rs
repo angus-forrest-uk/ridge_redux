@@ -15,54 +15,10 @@ use ndarray::Array2;
 
 use crate::{Error, Result};
 
-/// Numpy's default ('linear') percentile on a non-empty slice.
-pub fn percentile_linear(sorted: &[f64], q: f64) -> f64 {
-    assert!(!sorted.is_empty(), "percentile of empty slice");
-    assert!((0.0..=100.0).contains(&q), "q out of range");
-    if sorted.len() == 1 {
-        return sorted[0];
-    }
-    let idx = q / 100.0 * (sorted.len() - 1) as f64;
-    let lo = idx.floor() as usize;
-    let hi = idx.ceil() as usize;
-    if lo == hi {
-        return sorted[lo];
-    }
-    let frac = idx - lo as f64;
-    sorted[lo] + (sorted[hi] - sorted[lo]) * frac
-}
-
-/// (2k+1)x(2k+1) max - min gradient with in-bounds neighborhoods only
-/// (skimage `rank` filters ignore out-of-image samples — verified against
-/// `skimage/filters/rank/core_cy.pyx::_core`, which skips out-of-bounds
-/// positions via `is_in_mask`). `k = 1` is the 3x3 gradient.
-pub fn morphological_gradient(img: &[u8], nrows: usize, ncols: usize, k: usize) -> Vec<u8> {
-    let mut out = vec![0u8; nrows * ncols];
-    for r in 0..nrows {
-        for c in 0..ncols {
-            let mut min = u8::MAX;
-            let mut max = 0u8;
-            let r0 = r.saturating_sub(k);
-            let r1 = (r + k).min(nrows - 1);
-            let c0 = c.saturating_sub(k);
-            let c1 = (c + k).min(ncols - 1);
-            for rr in r0..=r1 {
-                for cc in c0..=c1 {
-                    let v = img[rr * ncols + cc];
-                    min = min.min(v);
-                    max = max.max(v);
-                }
-            }
-            out[r * ncols + c] = max - min;
-        }
-    }
-    out
-}
-
-/// Back-compat alias for the 3x3 gradient.
-pub fn gradient3x3(img: &[u8], nrows: usize, ncols: usize) -> Vec<u8> {
-    morphological_gradient(img, nrows, ncols, 1)
-}
+// Frozen ports (numpy percentile, skimage u8 rank gradient) live in `upstream`
+// and are re-exported here so the public paths are unchanged.
+pub use crate::upstream::numpy::percentile_linear;
+pub use crate::upstream::skimage::{gradient3x3, morphological_gradient};
 
 /// Smallest connected flat region (in cells) that counts as a lake.
 /// Anything smaller is quantization noise on sloped terrain.
@@ -75,27 +31,20 @@ const MIN_LAKE_COMPONENT: usize = 12;
 pub fn masked_gradient3x3(img: &[f64], excluded: &[bool], nrows: usize, ncols: usize) -> Vec<f32> {
     let mut out = vec![0f32; nrows * ncols];
     for r in 0..nrows {
+        let (r0, r1) = (r.saturating_sub(1), (r + 1).min(nrows - 1));
         for c in 0..ncols {
-            let mut min = f64::INFINITY;
-            let mut max = f64::NEG_INFINITY;
-            let mut any = false;
-            let r0 = r.saturating_sub(1);
-            let r1 = (r + 1).min(nrows - 1);
-            let c0 = c.saturating_sub(1);
-            let c1 = (c + 1).min(ncols - 1);
-            for rr in r0..=r1 {
-                for cc in c0..=c1 {
-                    let i = rr * ncols + cc;
-                    if excluded[i] {
-                        continue;
-                    }
-                    let v = img[i];
-                    any = true;
-                    min = min.min(v);
-                    max = max.max(v);
-                }
-            }
-            out[r * ncols + c] = if any { (max - min) as f32 } else { 0.0 };
+            let (c0, c1) = (c.saturating_sub(1), (c + 1).min(ncols - 1));
+            // min/max over the in-bounds 3x3 neighbourhood, skipping excluded
+            // cells. `None` means the cell had no valid neighbour at all —
+            // flat, gradient 0 (skimage's masked rank-filter behaviour).
+            let bounds = (r0..=r1)
+                .flat_map(|rr| (c0..=c1).map(move |cc| rr * ncols + cc))
+                .filter(|&i| !excluded[i])
+                .map(|i| img[i])
+                .fold(None, |acc: Option<(f64, f64)>, v| {
+                    Some(acc.map_or((v, v), |(lo, hi)| (lo.min(v), hi.max(v))))
+                });
+            out[r * ncols + c] = bounds.map_or(0.0, |(lo, hi)| (hi - lo) as f32);
         }
     }
     out
@@ -106,27 +55,31 @@ pub fn masked_gradient3x3(img: &[f64], excluded: &[bool], nrows: usize, ncols: u
 fn keep_large_components(mask: &[bool], nrows: usize, ncols: usize, min_size: usize) -> Vec<bool> {
     let mut out = vec![false; nrows * ncols];
     let mut visited = vec![false; nrows * ncols];
-    let mut stack: Vec<usize> = Vec::new();
     for start in 0..nrows * ncols {
         if !mask[start] || visited[start] {
             continue;
         }
-        // Flood-fill this component.
-        stack.clear();
-        stack.push(start);
-        visited[start] = true;
+        // Depth-first flood fill of this 4-connected component.
         let mut component = Vec::new();
+        let mut stack = vec![start];
+        visited[start] = true;
         while let Some(i) = stack.pop() {
             component.push(i);
-            let r = i / ncols;
-            let c = i % ncols;
-            for (dr, dc) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
-                let rr = r as i64 + dr;
-                let cc = c as i64 + dc;
-                if rr < 0 || cc < 0 || rr >= nrows as i64 || cc >= ncols as i64 {
-                    continue;
-                }
-                let j = rr as usize * ncols + cc as usize;
+            let (r, c) = (i / ncols, i % ncols);
+            // In-bounds 4-neighbours, with no signed-index arithmetic: a
+            // missing row/column is `None` and drops out of the flatten.
+            let neighbours = [
+                r.checked_sub(1).map(|rr| (rr, c)),
+                (r + 1 < nrows).then_some((r + 1, c)),
+                c.checked_sub(1).map(|cc| (r, cc)),
+                (c + 1 < ncols).then_some((r, c + 1)),
+            ];
+            for j in neighbours
+                .into_iter()
+                .flatten()
+                .map(|(rr, cc)| rr * ncols + cc)
+            {
+                // Not an iterator `.filter`: `visited` is mutated in the body.
                 if mask[j] && !visited[j] {
                     visited[j] = true;
                     stack.push(j);
@@ -272,17 +225,7 @@ pub fn preprocess(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::array;
-
-    #[test]
-    fn percentile_matches_numpy_linear() {
-        // np.percentile([1,2,3,4,5,6,7,8,9,10], 10) = 1.9
-        let s: Vec<f64> = (1..=10).map(|i| i as f64).collect();
-        assert!((percentile_linear(&s, 10.0) - 1.9).abs() < 1e-12);
-        assert!((percentile_linear(&s, 50.0) - 5.5).abs() < 1e-12);
-        assert!((percentile_linear(&s, 0.0) - 1.0).abs() < 1e-12);
-        assert!((percentile_linear(&s, 100.0) - 10.0).abs() < 1e-12);
-    }
+    use ndarray::{array, s};
 
     #[test]
     fn masks_water_and_flat() {
@@ -335,62 +278,47 @@ mod tests {
         //     exactly equal range at every cell — no rounding speckle),
         //   - the isolated dip is too small a component and is NOT masked.
         let n = 40;
-        let mut a = Array2::<f64>::zeros((n, n));
-        for r in 0..n {
-            // N-S slope: 3x3 float range = 2 * 0.6 / relief >= threshold
-            for c in 0..n {
-                a[(r, c)] = 100.0 + 0.6 * (r as f64);
-            }
-        }
-        // Flat bench: rows 8..13, cols 12..22 at a constant height.
-        for r in 8..13 {
-            for c in 12..22 {
-                a[(r, c)] = 105.0;
-            }
-        }
-        // Pond: rows 14..24, cols 12..22, flat — adjacent to the bench.
-        for r in 14..24 {
-            for c in 12..22 {
-                a[(r, c)] = 107.0;
-            }
-        }
-        // Isolated 2x2 dip on the slope (rows 28..30, cols 30..32), flat.
-        for r in 28..30 {
-            for c in 30..32 {
-                a[(r, c)] = 116.0;
-            }
-        }
+        let mut a = Array2::from_shape_fn((n, n), |(r, _)| 100.0 + 0.6 * r as f64);
+        a.slice_mut(s![8..13, 12..22]).fill(105.0); // flat bench
+        a.slice_mut(s![14..24, 12..22]).fill(107.0); // pond, adjacent to the bench
+        a.slice_mut(s![28..30, 30..32]).fill(116.0); // isolated 2x2 dip on the slope
 
         let out = preprocess(&a, 0.0, 3, 1.0, 1.0, None).unwrap();
 
         // preprocess flips rows: out row = 39 - src row.
         // Pond interior (src 15..22, cols 13..20) -> out rows 17..24.
         // Bench interior (src 9..11, cols 13..20) -> out rows 28..30.
-        // Both are flat components >= MIN_LAKE_COMPONENT: all masked.
-        for r in 17..24 {
-            for c in 13..20 {
-                assert!(out[(r, c)].is_nan(), "pond cell ({r},{c}) should be masked");
-            }
-        }
-        for r in 28..30 {
-            for c in 13..20 {
-                assert!(
-                    out[(r, c)].is_nan(),
-                    "bench cell ({r},{c}) should be masked"
-                );
-            }
-        }
+        // Both are flat components >= MIN_LAKE_COMPONENT: all masked. Report
+        // the first offending cell per region if that ever fails.
+        let first_unmasked_in = |rows: std::ops::Range<usize>, cols: std::ops::Range<usize>| {
+            out.indexed_iter()
+                .find(|&((r, c), v)| rows.contains(&r) && cols.contains(&c) && !v.is_nan())
+                .map(|((r, c), _)| (r, c))
+        };
+        let unmasked_pond = first_unmasked_in(17..24, 13..20);
+        assert!(
+            unmasked_pond.is_none(),
+            "pond cell {:?} should be masked",
+            unmasked_pond
+        );
+        let unmasked_bench = first_unmasked_in(28..30, 13..20);
+        assert!(
+            unmasked_bench.is_none(),
+            "bench cell {:?} should be masked",
+            unmasked_bench
+        );
         // The slope must be hole-free (no rounding speckle), and the
         // isolated 2x2 dip is dropped by the component-size filter.
-        for r in 0..n {
-            for c in 0..n {
-                if out[(r, c)].is_nan() {
-                    let in_pond = (17..=24).contains(&r) && (13..=20).contains(&c);
-                    let in_bench = (28..=30).contains(&r) && (13..=20).contains(&c);
-                    assert!(in_pond || in_bench, "unexpected hole at ({r},{c})");
-                }
-            }
-        }
+        let unexpected_hole = out.indexed_iter().find(|&((r, c), v)| {
+            let in_expected_region = ((17..=24).contains(&r) && (13..=20).contains(&c))
+                || ((28..=30).contains(&r) && (13..=20).contains(&c));
+            v.is_nan() && !in_expected_region
+        });
+        assert!(
+            unexpected_hole.is_none(),
+            "unexpected hole at {:?}",
+            unexpected_hole.map(|((r, c), _)| (r, c))
+        );
     }
 
     #[test]
@@ -400,24 +328,25 @@ mod tests {
         // must not drag the water percentile to zero — the river has to
         // survive at water_ntile=15.
         let n = 10;
-        let mut a = Array2::<f64>::from_elem((n, n), f64::NAN);
-        for r in 0..n {
-            for c in 0..7 {
-                a[(r, c)] = 10.0 + 5.0 * r as f64 + c as f64; // river at r=0
+        let a = Array2::from_shape_fn((n, n), |(r, c)| {
+            if c < 7 {
+                10.0 + 5.0 * r as f64 + c as f64 // river at r=0
+            } else {
+                f64::NAN // padding outside the inscribed circle
             }
-        }
+        });
         let out = preprocess(&a, 15.0, 0, 1.0, 1.0, None).unwrap();
         // preprocess flips rows: src row 0 (river) -> out row n-1.
-        for c in 0..7 {
-            assert!(
-                out[(n - 1, c)].is_nan(),
-                "river cells must be water-masked (out row 9, col {c})"
-            );
-        }
+        assert!(
+            out.slice(s![n - 1, ..7]).iter().all(|v| v.is_nan()),
+            "river cells (out row {}) must be water-masked",
+            n - 1
+        );
         // Upland cells survive.
-        for c in 0..7 {
-            assert!(!out[(4, c)].is_nan(), "upland cell (4,{c}) must survive");
-        }
+        assert!(
+            out.slice(s![4, ..7]).iter().all(|v| v.is_finite()),
+            "upland cells (out row 4) must survive"
+        );
     }
 
     #[test]
