@@ -33,7 +33,6 @@ fn fixture_config() -> ServerConfig {
         cache_dir: std::env::temp_dir().join("ridge-test-cache"),
         fixture_dir: dir.ok(),
         open_browser: false,
-        prefetch: false,
     }
 }
 

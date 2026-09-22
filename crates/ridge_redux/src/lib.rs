@@ -30,9 +30,6 @@ pub struct ServerConfig {
     pub fixture_dir: Option<PathBuf>,
     /// Open the app in the default browser once it's listening.
     pub open_browser: bool,
-    /// Load the default scene's elevation before offering the URL, so the
-    /// first page load doesn't wait on the tile fetch.
-    pub prefetch: bool,
 }
 
 /// Interactive ridgeline maps of real terrain, as a local web app.
@@ -76,18 +73,22 @@ fn default_cache_dir() -> PathBuf {
         .join("srtm")
 }
 
+impl Cli {
+    fn into_config(self) -> ServerConfig {
+        ServerConfig {
+            addr: self.addr,
+            web_dir: self.web_dir,
+            srtm_base: self.srtm_base,
+            cache_dir: self.cache_dir.unwrap_or_else(default_cache_dir),
+            fixture_dir: self.fixture_dir,
+            open_browser: !self.no_open,
+        }
+    }
+}
+
 impl ServerConfig {
     pub fn from_env_and_args() -> ServerConfig {
-        let cli = Cli::parse();
-        ServerConfig {
-            addr: cli.addr,
-            web_dir: cli.web_dir,
-            srtm_base: cli.srtm_base,
-            cache_dir: cli.cache_dir.unwrap_or_else(default_cache_dir),
-            fixture_dir: cli.fixture_dir,
-            open_browser: !cli.no_open,
-            prefetch: !cli.no_prefetch,
-        }
+        Cli::parse().into_config()
     }
 }
 
@@ -99,7 +100,11 @@ pub async fn run() {
         )
         .init();
 
-    let config = ServerConfig::from_env_and_args();
+    // Prefetching is a startup step, not server config: `ServerConfig` is
+    // public and built with struct literals, so a new field would break them.
+    let cli = Cli::parse();
+    let prefetch = !cli.no_prefetch;
+    let config = cli.into_config();
     let state = state::AppState::new(&config);
 
     let app = build_router(state.clone(), &config);
@@ -120,7 +125,7 @@ pub async fn run() {
     };
     // Bound but not yet announced: connections queue until we serve, and
     // the browser isn't pointed here until the default scene is cached.
-    if config.prefetch {
+    if prefetch {
         api::prefetch_default_scene(&state).await;
     }
     let url = format!("http://{}", listener.local_addr().expect("bound address"));
