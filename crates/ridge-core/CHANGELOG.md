@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge-core-v0.3.1...ridge-core-v0.3.2) - 2026-09-22
+
+### Added
+
+- *(render)* parse the CLI with clap
+
+### Fixed
+
+- *(rotate)* use scipy's constant-mode coordinate bounds in nearest sampling
+
+### Other
+
+- *(ridge-core)* record why the matplotlib classic maps are kept local
+- *(ridge-core)* prefer iterator and ndarray idioms over index loops
+- *(ridge-core)* pin the frozen ports with Python-reference fixtures
+- *(ridge-core)* isolate the frozen reference ports in an upstream module
+
 ## [0.3.0](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge-core-v0.2.0...ridge-core-v0.3.0) - 2026-09-22
 
 ### Added

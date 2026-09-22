@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.3.1...ridge_redux-v0.3.2) - 2026-09-22
+
+### Other
+
+- *(ridge-core)* prefer iterator and ndarray idioms over index loops
+- *(ridge-core)* pin the frozen ports with Python-reference fixtures
+
 ## [0.3.1](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.3.0...ridge_redux-v0.3.1) - 2026-09-22
 
 ### Added
