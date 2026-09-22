@@ -119,22 +119,25 @@ impl RidgeScene {
     /// vertically scaled by `preprocess::preprocess`).
     pub fn from_grid(processed: &Array2<f64>, bbox_ratio: f64, size_scale: f64) -> RidgeScene {
         let (nrows, ncols) = processed.dim();
-        let mut rows = Vec::with_capacity(nrows);
-        let mut vmin = f64::INFINITY;
-        let mut vmax = f64::NEG_INFINITY;
-        for i in 0..nrows {
-            let baseline = -LINE_SPACING * i as f64;
-            let mut y = Vec::with_capacity(ncols);
-            for c in 0..ncols {
-                let v = processed[(i, c)];
-                if v.is_finite() {
-                    vmin = vmin.min(v);
-                    vmax = vmax.max(v);
+        let rows: Vec<RidgeRow> = processed
+            .outer_iter()
+            .enumerate()
+            .map(|(i, src)| {
+                let baseline = -LINE_SPACING * i as f64;
+                RidgeRow {
+                    baseline,
+                    y: src.iter().map(|&v| v + baseline).collect(),
                 }
-                y.push(v + baseline);
-            }
-            rows.push(RidgeRow { baseline, y });
-        }
+            })
+            .collect();
+
+        let (mut vmin, mut vmax) = processed
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                (lo.min(v), hi.max(v))
+            });
         if !vmin.is_finite() {
             vmin = 0.0;
             vmax = 1.0;
@@ -143,31 +146,21 @@ impl RidgeScene {
         // matplotlib autoscale with 5% margins — around the ACTUAL drawn
         // content, so the scene stays framed at any rotation angle (the
         // camera operator keeps the subject centered at constant size).
-        let mut xmin = usize::MAX;
-        let mut xmax_data = 0usize;
-        let mut ymin = f64::INFINITY;
-        let mut ymax_data = f64::NEG_INFINITY;
-        for row in &rows {
-            let mut has_data = false;
-            for (c, &y) in row.y.iter().enumerate() {
-                if y.is_finite() {
-                    has_data = true;
-                    if y > ymax_data {
-                        ymax_data = y;
-                    }
-                    if c < xmin {
-                        xmin = c;
-                    }
-                    if c > xmax_data {
-                        xmax_data = c;
-                    }
-                }
-            }
-            // Fills reach the baseline, so it bounds the content from below.
-            if has_data && row.baseline < ymin {
-                ymin = row.baseline;
-            }
-        }
+        let (xmin, xmax_data, ymax_data) = rows
+            .iter()
+            .flat_map(|row| row.y.iter().enumerate())
+            .filter(|&(_, y)| y.is_finite())
+            .fold(
+                (usize::MAX, 0usize, f64::NEG_INFINITY),
+                |(xmin, xmax, ymax), (c, &y)| (xmin.min(c), xmax.max(c), ymax.max(y)),
+            );
+        // Fills reach the baseline, so a row with any data bounds the content
+        // from below.
+        let ymin = rows
+            .iter()
+            .filter(|row| row.y.iter().any(|y| y.is_finite()))
+            .map(|row| row.baseline)
+            .fold(f64::INFINITY, f64::min);
         let (xmin, xmax_data, ymin, ymax_data) = if xmin == usize::MAX {
             // No drawable content: fall back to the theoretical frame.
             (0, ncols - 1, -LINE_SPACING * (nrows - 1) as f64, vmax)

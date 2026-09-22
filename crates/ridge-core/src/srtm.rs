@@ -179,19 +179,21 @@ impl SyntheticSource {
 
 impl TileSource for SyntheticSource {
     fn tile(&self, lat_lo: i32, lon_lo: i32) -> Option<Arc<Tile>> {
-        let n = self.side * self.side;
-        let mut data = Vec::with_capacity(n);
-        for row in 0..self.side {
-            let lat = lat_lo as f64 + 1.0 - row as f64 / (self.side - 1) as f64;
-            for col in 0..self.side {
-                let lon = lon_lo as f64 + col as f64 / (self.side - 1) as f64;
-                data.push(Self::value(lat, lon).round() as i16);
-            }
-        }
+        let side = self.side;
+        let scale = (side - 1) as f64;
+        let (lat0, lon0) = (lat_lo as f64, lon_lo as f64);
+        // A north-up `side x side` grid of the smooth terrain, row-major: `lat`
+        // is constant along a row, `lon` varies per column.
+        let data: Vec<i16> = (0..side)
+            .flat_map(|row| {
+                let lat = lat0 + 1.0 - row as f64 / scale;
+                (0..side).map(move |col| Self::value(lat, lon0 + col as f64 / scale).round() as i16)
+            })
+            .collect();
         Some(Arc::new(Tile {
-            lat_lo: lat_lo as f64,
-            lon_lo: lon_lo as f64,
-            side: self.side,
+            lat_lo: lat0,
+            lon_lo: lon0,
+            side,
             data,
         }))
     }

@@ -277,9 +277,10 @@ async fn elevation_endpoint_is_angle_free_and_raw() {
     assert!(body["window"]["cols"].as_u64().unwrap() <= shape[1].as_u64().unwrap());
     // Raw samples are integer meters; voids are null.
     let first = body["values"][0].as_array().unwrap();
-    for v in first {
-        assert!(v.is_null() || v.is_i64(), "raw samples must be int or null");
-    }
+    assert!(
+        first.iter().all(|v| v.is_null() || v.is_i64()),
+        "raw samples must be int or null"
+    );
     // Some finite data must exist inside the White Mountains bbox.
     let any_finite = body["values"]
         .as_array()

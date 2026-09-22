@@ -8,8 +8,8 @@ use std::fmt::Write;
 
 use serde::{Deserialize, Serialize};
 
-use crate::colormap::Rgb;
-use crate::geometry::{ColorKind, FigureLayout, RidgeScene, FIG_DPI};
+use crate::colormap::{LineColor, Rgb};
+use crate::geometry::{ColorKind, FigureLayout, RidgeRow, RidgeScene, FIG_DPI};
 fn hex3(c: Rgb) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
@@ -100,6 +100,16 @@ impl LineColorSpec {
     }
 }
 
+/// The `L x y` segments through `cols` at their y values, in order.
+fn line_to(layout: &FigureLayout, row: &RidgeRow, cols: impl IntoIterator<Item = usize>) -> String {
+    let mut d = String::new();
+    for i in cols {
+        let (x, y) = layout.to_px(i as f64, row.y[i]);
+        let _ = write!(d, " L {x:.2} {y:.2}");
+    }
+    d
+}
+
 /// Render the scene to a standalone SVG document.
 pub fn render_svg(scene: &RidgeScene, style: &PlotStyle) -> String {
     let layout = &scene.layout;
@@ -147,16 +157,12 @@ pub fn render_svg(scene: &RidgeScene, style: &PlotStyle) -> String {
         let fill_path = runs
             .iter()
             .map(|&(a, b)| {
-                let mut d = String::new();
                 let (x0, y_base) = layout.to_px(a as f64, row.baseline);
-                let _ = write!(d, "M {x0:.2} {y_base:.2}");
-                for i in a..b {
-                    let (x, y) = layout.to_px(i as f64, row.y[i]);
-                    let _ = write!(d, " L {x:.2} {y:.2}");
-                }
                 let (x1, _) = layout.to_px((b - 1) as f64, row.baseline);
-                let _ = write!(d, " L {x1:.2} {y_base:.2} Z");
-                d
+                format!(
+                    "M {x0:.2} {y_base:.2}{} L {x1:.2} {y_base:.2} Z",
+                    line_to(layout, row, a..b)
+                )
             })
             .collect::<Vec<_>>()
             .join(" ");
@@ -167,45 +173,31 @@ pub fn render_svg(scene: &RidgeScene, style: &PlotStyle) -> String {
 
         // Strokes.
         match (style.kind, &line) {
-            (ColorKind::Elevation, crate::colormap::LineColor::Map(_)) => {
+            (ColorKind::Elevation, LineColor::Map(_)) => {
+                // One path per segment, colored by the elevation at the
+                // segment's first point (upstream LineCollection semantics).
                 for &(a, b) in &runs {
-                    let mut d = String::new();
-                    let (mut px, mut py) = layout.to_px(a as f64, row.y[a]);
-                    let _ = write!(d, "M {px:.2} {py:.2}");
                     for i in (a + 1)..b {
                         let color = scene.elevation_color(&line, row.y[i - 1] - row.baseline);
-                        let (x, y) = layout.to_px(i as f64, row.y[i]);
-                        let _ = write!(d, " L {x:.2} {y:.2}");
+                        let (x0, y0) = layout.to_px((i - 1) as f64, row.y[i - 1]);
+                        let (x1, y1) = layout.to_px(i as f64, row.y[i]);
                         let _ = writeln!(
                             s,
-                            r#"    <path d="{}" fill="none" stroke="{}" stroke-width="{lw:.3}" stroke-linecap="round" stroke-linejoin="round" />"#,
-                            d,
+                            r#"    <path d="M {x0:.2} {y0:.2} L {x1:.2} {y1:.2}" fill="none" stroke="{}" stroke-width="{lw:.3}" stroke-linecap="round" stroke-linejoin="round" />"#,
                             hex3(color),
                             lw = lw_px
                         );
-                        d = format!("M {x:.2} {y:.2}");
-                        px = x;
-                        py = y;
                     }
-                    let _ = (px, py);
                 }
             }
             _ => {
                 let color = scene.gradient_color(&line, idx);
                 let path = runs
                     .iter()
-                    .filter_map(|&(a, b)| {
-                        if b - a < 2 {
-                            return None;
-                        }
-                        let mut d = String::new();
+                    .filter(|&&(a, b)| b - a >= 2)
+                    .map(|&(a, b)| {
                         let (x, y) = layout.to_px(a as f64, row.y[a]);
-                        let _ = write!(d, "M {x:.2} {y:.2}");
-                        for i in (a + 1)..b {
-                            let (x, y) = layout.to_px(i as f64, row.y[i]);
-                            let _ = write!(d, " L {x:.2} {y:.2}");
-                        }
-                        Some(d)
+                        format!("M {x:.2} {y:.2}{}", line_to(layout, row, (a + 1)..b))
                     })
                     .collect::<Vec<_>>()
                     .join(" ");

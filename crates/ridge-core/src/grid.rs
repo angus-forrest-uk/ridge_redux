@@ -25,21 +25,14 @@ pub fn sample(
 ) -> Array2<f64> {
     let (lat0, lat1) = bbox.lats();
     let (lon0, lon1) = bbox.longs();
-    let mut values = Array2::<f64>::from_elem((num_lines, elevation_pts), f64::NAN);
-    for r in 0..num_lines {
+    Array2::from_shape_fn((num_lines, elevation_pts), |(r, c)| {
         let lat = lat0 + r as f64 / num_lines as f64 * (lat1 - lat0);
-        let lat_tile = lat.floor() as i32;
-        for c in 0..elevation_pts {
-            let lon = lon0 + c as f64 / elevation_pts as f64 * (lon1 - lon0);
-            let lon_tile = lon.floor() as i32;
-            let tile = match source.tile(lat_tile, lon_tile) {
-                Some(t) => t,
-                None => continue, // open ocean tile -> stays NaN
-            };
-            values[(r, c)] = tile.elevation(lat, lon);
-        }
-    }
-    values
+        let lon = lon0 + c as f64 / elevation_pts as f64 * (lon1 - lon0);
+        // Missing tile (open ocean) or a void sample -> NaN.
+        source
+            .tile(lat.floor() as i32, lon.floor() as i32)
+            .map_or(f64::NAN, |tile| tile.elevation(lat, lon))
+    })
 }
 
 /// Sample a square, disc-masked region: `n x n` points over a square of
@@ -58,26 +51,19 @@ pub fn sample_disc(
     span_deg: f64,
     n: usize,
 ) -> Array2<f64> {
-    let mut values = Array2::<f64>::from_elem((n, n), f64::NAN);
     let half = span_deg / 2.0;
     let radius_sq = half * half;
-    for r in 0..n {
+    Array2::from_shape_fn((n, n), |(r, c)| {
         let lat = center_lat - half + r as f64 / n as f64 * span_deg;
-        let dlat = lat - center_lat;
-        for c in 0..n {
-            let lon = center_lon - half + c as f64 / n as f64 * span_deg;
-            let dlon = lon - center_lon;
-            if dlat * dlat + dlon * dlon > radius_sq {
-                continue; // excess beyond the disc: stays NaN, never sampled
-            }
-            let lat_tile = lat.floor() as i32;
-            let lon_tile = lon.floor() as i32;
-            if let Some(tile) = source.tile(lat_tile, lon_tile) {
-                values[(r, c)] = tile.elevation(lat, lon);
-            }
+        let lon = center_lon - half + c as f64 / n as f64 * span_deg;
+        let (dlat, dlon) = (lat - center_lat, lon - center_lon);
+        if dlat * dlat + dlon * dlon > radius_sq {
+            return f64::NAN; // outside the disc: never sampled
         }
-    }
-    values
+        source
+            .tile(lat.floor() as i32, lon.floor() as i32)
+            .map_or(f64::NAN, |tile| tile.elevation(lat, lon))
+    })
 }
 
 /// Sample an ANISOTROPIC display window from a preprocessed square data
@@ -103,23 +89,22 @@ pub fn sample_window(
     num_lines: usize,
     elevation_pts: usize,
 ) -> Array2<f64> {
-    let mut out = Array2::from_elem((num_lines, elevation_pts), f64::NAN);
     let step = d_span / data.nrows() as f64; // data grid is square
-    for i in 0..num_lines {
+    Array2::from_shape_fn((num_lines, elevation_pts), |(i, j)| {
         let lat = lat0 + i as f64 / num_lines as f64 * (lat1 - lat0);
-        for j in 0..elevation_pts {
-            let lon = lon0 + j as f64 / elevation_pts as f64 * (lon1 - lon0);
-            let r = ((lat - d_lat0) / step).round();
-            let c = ((lon - d_lon0) / step).round();
-            if r >= 0.0 && c >= 0.0 {
-                let (ru, cu) = (r as usize, c as usize);
-                if ru < data.nrows() && cu < data.ncols() {
-                    out[(i, j)] = data[(ru, cu)];
-                }
-            }
+        let lon = lon0 + j as f64 / elevation_pts as f64 * (lon1 - lon0);
+        let r = ((lat - d_lat0) / step).round();
+        let c = ((lon - d_lon0) / step).round();
+        // Reject anything that isn't a non-negative index, including the NaN
+        // a degenerate `step` can produce (`NaN as usize` silently saturates
+        // to 0); `get` then handles the far edge (out of bounds -> NaN).
+        if !(r >= 0.0 && c >= 0.0) {
+            return f64::NAN;
         }
-    }
-    out
+        data.get((r as usize, c as usize))
+            .copied()
+            .unwrap_or(f64::NAN)
+    })
 }
 
 /// Upstream `get_elevation_data` swaps the sampling resolution when the
@@ -196,16 +181,19 @@ mod tests {
             (finite as i64 - expected as i64).abs() < 40,
             "finite {finite} vs {expected}"
         );
-        // Outside the disc: strictly NaN.
-        for r in 0..40 {
-            for c in 0..40 {
-                let dlat = (44.0 - 0.5 + r as f64 / 40.0) - 44.0;
-                let dlon = (-72.0 - 0.5 + c as f64 / 40.0) - -72.0;
-                if dlat * dlat + dlon * dlon > 0.25 {
-                    assert!(grid[(r, c)].is_nan(), "({r},{c}) outside disc must be NaN");
-                }
-            }
-        }
+        // Outside the disc: strictly NaN. `grid` is 40x40 centered at
+        // (44, -72) with span 1.0, so the disc radius is 0.5.
+        let outside_disc = |r: usize, c: usize| {
+            let dlat = (44.0 - 0.5 + r as f64 / 40.0) - 44.0;
+            let dlon = (-72.0 - 0.5 + c as f64 / 40.0) - -72.0;
+            dlat * dlat + dlon * dlon > 0.25
+        };
+        assert!(
+            grid.indexed_iter()
+                .filter(|&((r, c), _)| outside_disc(r, c))
+                .all(|(_, v)| v.is_nan()),
+            "every cell outside the disc must be NaN"
+        );
     }
 
     #[test]
@@ -214,12 +202,7 @@ mod tests {
         // position so we can verify exactly which node each window cell read.
         let src = SyntheticSource { side: 8 }; // unused for this test
         let _ = src;
-        let mut data = Array2::from_elem((8, 8), f64::NAN);
-        for r in 0..8 {
-            for c in 0..8 {
-                data[(r, c)] = (r * 100 + c) as f64;
-            }
-        }
+        let data = Array2::from_shape_fn((8, 8), |(r, c)| (r * 100 + c) as f64);
         // Data square: lat 43.5..44.5, lon -72.5..-71.5.
         let (d_lat0, d_lon0, d_span) = (43.5f64, -72.5f64, 1.0f64);
         // Window = the lower-left 4x8-degree... anisotropic: lat 43.5..44.3
@@ -248,6 +231,16 @@ mod tests {
         // Rows: window row i -> data row round(i * 0.2 / 0.125).
         assert_eq!(out[(2, 0)], 300.0); // round(3.2) = 3
         assert_eq!(out[(3, 0)], 500.0); // round(4.8) = 5
+    }
+
+    #[test]
+    fn zero_span_window_is_all_gaps() {
+        // A degenerate zero-degree span makes `step == 0`, so the coordinate
+        // math yields NaN/inf. The window must come back entirely NaN rather
+        // than silently reading cell (0, 0) (a NaN cast saturates to 0).
+        let data = Array2::from_shape_fn((4, 4), |(r, c)| (r * 4 + c) as f64);
+        let out = sample_window(&data, 43.0, -72.0, 0.0, 43.0, -72.0, 44.0, -71.0, 4, 4);
+        assert!(out.iter().all(|v| v.is_nan()), "zero span must not sample");
     }
 
     #[test]
@@ -299,21 +292,24 @@ mod parity_tests {
         let grid = sample(&src, &crate::DEFAULT_BBOX, 80, 300);
         assert_eq!(grid.len(), expected.len());
 
+        // Compare every sample with upstream. A cell agrees when both sides
+        // are gaps, or both are finite and within 1e-9; anything else counts
+        // as a mismatch.
         let mut mismatches = 0usize;
         let mut worst = 0.0f64;
-        for (got, want) in grid.iter().zip(expected.iter()) {
-            match (got.is_nan(), want.is_nan()) {
-                (true, true) => {}
-                (false, false) => {
-                    let d = (got - want).abs();
-                    if d > 1e-9 {
-                        mismatches += 1;
-                        worst = worst.max(d);
-                    }
-                }
-                _ => {
-                    mismatches += 1;
-                }
+        for (&got, &want) in grid.iter().zip(&expected) {
+            if got.is_nan() && want.is_nan() {
+                continue; // both gaps: agree
+            }
+            let delta = (got - want).abs();
+            if !got.is_nan() && !want.is_nan() && delta <= 1e-9 {
+                continue; // both finite, within tolerance: agree
+            }
+            mismatches += 1;
+            // A gap on one side gives a NaN delta, which has no magnitude to
+            // track; only a finite disagreement can raise `worst`.
+            if delta.is_finite() {
+                worst = worst.max(delta);
             }
         }
         // Small mismatches can appear where nearest-neighbor rounding sits on
