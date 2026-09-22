@@ -85,3 +85,46 @@ jobs:
           curl -sf http://127.0.0.1:8420/ | grep -q '<title>ridge-redux'
           curl -sf http://127.0.0.1:8420/api/presets | grep -q 'White Mountains'
           curl -sf http://127.0.0.1:8420/api/readme | head -1 | grep -q '# ridge-redux'
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    permissions:
+      # Only for pushing the badge to the `badges` branch, on main.
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Cache SRTM fixtures
+        id: fixtures
+        uses: actions/cache@v6
+        with:
+          path: fixtures/srtm
+          key: srtm-${{ hashFiles('scripts/fetch_fixtures.sh') }}
+      - name: Fetch SRTM fixtures
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        run: scripts/fetch_fixtures.sh
+      # No `npm ci`: the Rust tests don't need the built frontend (build.rs
+      # embeds a placeholder page without it).
+      - name: Measure coverage
+        run: |
+          cargo llvm-cov --workspace --no-report
+          cargo llvm-cov report --json --summary-only --output-path coverage.json
+          {
+            echo '### Coverage'
+            echo '```'
+            cargo llvm-cov report --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Build the badge
+        run: scripts/coverage_badge.sh coverage.json badge/coverage.json
+      # The badge the README points at only tracks main.
+      - name: Publish the badge
+        if: github.ref == 'refs/heads/main' && github.repository_owner == 'angus-forrest-uk'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/publish_badge.sh badge/coverage.json

@@ -1,6 +1,7 @@
 # ridge-redux
 
 [![CI](https://github.com/angus-forrest-uk/ridge_redux/actions/workflows/ci.yml/badge.svg)](https://github.com/angus-forrest-uk/ridge_redux/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/angus-forrest-uk/ridge_redux/badges/coverage.json)](https://github.com/angus-forrest-uk/ridge_redux/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/ridge_redux.svg)](https://crates.io/crates/ridge_redux)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/angus-forrest-uk/ridge_redux/blob/main/LICENSE)
 
@@ -277,6 +278,7 @@ just web-dev      # frontend dev server with live reload on :4321 (API from `jus
 just test         # 47 Rust tests: 31 ridge-core (incl. golden parity) + 16 ridge_redux
 just test-web     # Vitest: app state + TS pipeline == Rust pipeline (bit-for-bit)
 just check-web    # type-check the frontend
+just coverage     # line coverage for the workspace (cargo-llvm-cov)
 just fixtures     # fetch the SRTM tiles for the golden parity test
 just fmt          # cargo fmt
 just clippy       # clippy, warnings are errors

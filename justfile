@@ -44,6 +44,11 @@ fixtures:
 test:
     cargo test --workspace --release
 
+# Test coverage (needs cargo-llvm-cov: `cargo install cargo-llvm-cov`).
+# `just coverage --html` writes a browsable report to target/llvm-cov/html.
+coverage *args:
+    cargo llvm-cov --workspace --summary-only {{args}}
+
 # Frontend tests: app state, and the TS pipeline against the Rust one (bit-for-bit)
 test-web:
     cargo run --release -q -p ridge-core --example dump_plane_fixture

@@ -7,3 +7,5 @@ Cargo.lock.orig
 scripts/node_modules/
 /crates/ridge_redux/dist/
 /crates/ridge_redux/dist/
+/coverage.json
+/badge/
