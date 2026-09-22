@@ -1,8 +1,15 @@
 //! Colors: named RGB values, matplotlib-style colormaps.
 //!
 //! `viridis`/`magma`/`inferno`/`plasma`/`cividis` come from the `colorous`
-//! crate; the classic matplotlib maps are implemented from matplotlib's own
-//! formulas (`lib/matplotlib/_cm.py`) so renders match the upstream examples.
+//! crate. The classic matplotlib maps (`spring`, `summer`, `autumn`,
+//! `winter`, `cool`, `bone`, `ocean`, `gnuplot`) are implemented here from
+//! matplotlib's own formulas (`lib/matplotlib/_cm.py`), because no
+//! permissively licensed crate ships them with matplotlib's definitions:
+//! `colorous::COOL` and `colorgrad::preset::cool()` are the Cubehelix/d3
+//! "cool", not matplotlib's, and `prismatica` is GPL-3.0 and carries only a
+//! handful of matplotlib maps. `tests::matplotlib_formulas` pins the exact
+//! values, so swapping in a crate's approximation would quietly change every
+//! render.
 
 /// 8-bit RGB.
 pub type Rgb = [u8; 3];
