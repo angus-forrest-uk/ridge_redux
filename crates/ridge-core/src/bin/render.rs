@@ -3,201 +3,227 @@
 //! Milestone tool for Phase 2: run the whole pipeline offline and emit an
 //! SVG, mirroring upstream README examples.
 
+use std::path::PathBuf;
+
+use clap::{Parser, ValueEnum};
+
 use ridge_core::colormap::LineColor;
 use ridge_core::geometry::{build_scene, ColorKind, DEFAULT_SIZE_SCALE};
 use ridge_core::svg::{render_svg, Annotation, LabelStyle, LineColorSpec, PlotStyle, VAlign};
 use ridge_core::{srtm, Bbox, DEFAULT_BBOX};
 
-#[derive(Debug, Clone, PartialEq)]
+/// Render ridgeline terrain art to a standalone SVG, offline or from the tile
+/// mirror.
+#[derive(Parser, Debug)]
+#[command(name = "render", version, about)]
 struct Args {
-    bbox: Bbox,
+    /// Bounding box "lon0,lat0,lon1,lat1" [default: The White Mountains, NH]
+    #[arg(
+        long,
+        value_name = "LON0,LAT0,LON1,LAT1",
+        value_parser = parse_bbox,
+        allow_hyphen_values = true
+    )]
+    bbox: Option<Bbox>,
+
+    /// Number of horizontal lines
+    #[arg(long, value_name = "N", default_value_t = 80)]
     num_lines: usize,
+
+    /// Number of points sampled on each line
+    #[arg(long, value_name = "N", default_value_t = 300)]
     elevation_pts: usize,
-    viewpoint_angle: f64,
+
+    /// Viewpoint angle in degrees
+    #[arg(
+        long,
+        value_name = "DEG",
+        default_value_t = 0.0,
+        allow_hyphen_values = true
+    )]
+    angle: f64,
+
+    /// Crop the corners when rotating
+    #[arg(long)]
     crop: bool,
+
+    /// Rotation interpolation order (0 = nearest, 1 = bilinear)
+    #[arg(
+        long,
+        value_name = "0|1",
+        default_value_t = 0,
+        value_parser = clap::value_parser!(u32).range(0..=1)
+    )]
     interpolation: u32,
+
+    /// Percentile below which elevations are masked as water
+    #[arg(long, value_name = "P", default_value_t = 10.0)]
     water_ntile: f64,
+
+    /// Flatness cutoff for lake detection
+    #[arg(long, value_name = "N", default_value_t = 3)]
     lake_flatness: i32,
+
+    /// Vertical exaggeration
+    #[arg(long, value_name = "R", default_value_t = 40.0)]
     vertical_ratio: f64,
-    linewidth_pt: f64,
+
+    /// Line width in points
+    #[arg(long, value_name = "PT", default_value_t = 2.0)]
+    linewidth: f64,
+
+    /// Line color or colormap: black, orange, "#0f0f0f", viridis, ocean, ...
+    #[arg(long, value_name = "NAME", default_value = "black")]
     color: String,
-    kind: ColorKind,
+
+    /// Colormap coloring mode
+    #[arg(long, value_enum, default_value = "gradient")]
+    kind: Kind,
+
+    /// Background color
+    #[arg(long, value_name = "NAME", default_value = "#ece9ec")]
     background: String,
+
+    /// Label text ("\n" for line breaks; "" for none)
+    #[arg(long, default_value = "The White\nMountains")]
     label: String,
+
+    /// Label color (defaults to the line color)
+    #[arg(long, value_name = "NAME")]
     label_color: Option<String>,
+
+    /// Label horizontal position, in axes fractions
+    #[arg(
+        long,
+        value_name = "F",
+        default_value_t = 0.62,
+        allow_hyphen_values = true
+    )]
     label_x: f64,
+
+    /// Label vertical position, in axes fractions
+    #[arg(
+        long,
+        value_name = "F",
+        default_value_t = 0.15,
+        allow_hyphen_values = true
+    )]
     label_y: f64,
-    label_size_pt: f64,
+
+    /// Label font size in points
+    #[arg(long, value_name = "PT", default_value_t = 60.0)]
+    label_size: f64,
+
+    /// Figure width in inches
+    #[arg(long, value_name = "IN", default_value_t = DEFAULT_SIZE_SCALE)]
     size_scale: f64,
-    annotation: Option<(f64, f64, String)>,
+
+    /// Dot + label at a coordinate, written "lon,lat,text"
+    #[arg(
+        long,
+        value_name = "LON,LAT,TEXT",
+        value_parser = parse_annotation,
+        allow_hyphen_values = true
+    )]
+    annotate: Option<AnnotationArg>,
+
+    /// Comma-separated SRTM mirror base URLs, tried in order
+    #[arg(
+        long,
+        value_name = "URL",
+        default_value = "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/"
+    )]
     srtm_base: String,
-    cache_dir: Option<String>,
-    fixture_dir: Option<String>,
-    out: String,
+
+    /// Tile cache directory (default: ridge-redux/srtm in the OS cache dir)
+    #[arg(long, value_name = "DIR")]
+    cache_dir: Option<PathBuf>,
+
+    /// Read .hgt tiles from this directory instead of the network (offline)
+    #[arg(long, value_name = "DIR")]
+    fixture_dir: Option<PathBuf>,
+
+    /// Output SVG file
+    #[arg(long, value_name = "FILE", default_value = "ridge.svg")]
+    out: PathBuf,
 }
 
-impl Default for Args {
-    fn default() -> Self {
-        Args {
-            bbox: DEFAULT_BBOX,
-            num_lines: 80,
-            elevation_pts: 300,
-            viewpoint_angle: 0.0,
-            crop: false,
-            interpolation: 0,
-            water_ntile: 10.0,
-            lake_flatness: 3,
-            vertical_ratio: 40.0,
-            linewidth_pt: 2.0,
-            color: "black".into(),
-            kind: ColorKind::Gradient,
-            background: "#ece9ec".into(),
-            label: "The White\nMountains".into(),
-            label_color: None,
-            label_x: 0.62,
-            label_y: 0.15,
-            label_size_pt: 60.0,
-            size_scale: DEFAULT_SIZE_SCALE,
-            annotation: None,
-            srtm_base: "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/".into(),
-            cache_dir: None,
-            fixture_dir: None,
-            out: "ridge.svg".into(),
+/// How a colormap-driven `line_color` colors the lines.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum Kind {
+    /// Color by line index (upstream `kind="gradient"`)
+    Gradient,
+    /// Color by elevation along the line (upstream `kind="elevation"`)
+    Elevation,
+}
+
+impl From<Kind> for ColorKind {
+    fn from(kind: Kind) -> Self {
+        match kind {
+            Kind::Gradient => ColorKind::Gradient,
+            Kind::Elevation => ColorKind::Elevation,
         }
     }
 }
 
-fn usage() -> &'static str {
-    r#"ridge render — ridgeline terrain art to SVG
-
-USAGE:
-  render [OPTIONS]
-
-OPTIONS:
-  --bbox "lon0,lat0,lon1,lat1"   Bounding box (default: White Mountains, NH)
-  --num-lines N                  Horizontal lines (default 80)
-  --elevation-pts N              Points per line (default 300)
-  --angle DEG                    Viewpoint angle (default 0)
-  --crop                         Crop corners when rotating
-  --interpolation 0|1            Rotation interpolation (default 0)
-  --water-ntile P                Water percentile cutoff (default 10)
-  --lake-flatness N              Flatness cutoff for lakes (default 3)
-  --vertical-ratio R             Vertical exaggeration (default 40)
-  --linewidth PT                 Line width in points (default 2)
-  --color NAME                   Color or colormap: black, orange, #0f0f0f,
-                                 viridis, ocean, spring, cool, bone, gnuplot...
-  --kind gradient|elevation      Colormap coloring mode (default gradient)
-  --background NAME              Background color (default #ece9ec)
-  --label TEXT                   Label ("\n" for line breaks; "" for none)
-  --label-color NAME             Label color (defaults to line color)
-  --label-x F --label-y F        Label position in axes fractions
-  --label-size PT                Label font size (default 60)
-  --size-scale IN                Figure width in inches (default 20)
-  --annotate "lon,lat,TEXT"      Dot + label at a coordinate
-  --srtm-base URL                Tile mirror (default kurviger SRTM1)
-  --cache-dir DIR                Tile cache (default: ridge-redux/srtm in the OS cache dir)
-  --fixture-dir DIR              Read .hgt tiles from DIR instead (offline)
-  --out FILE                     Output SVG (default ridge.svg)
-"#
+/// A `--annotate "lon,lat,text"` value.
+#[derive(Clone, Debug)]
+struct AnnotationArg {
+    lon: f64,
+    lat: f64,
+    text: String,
 }
 
-fn parse_color(name: &str) -> Result<LineColor, String> {
-    LineColor::parse(name).ok_or_else(|| format!("unknown color {name:?}"))
-}
-
-impl Args {
-    fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
-        let mut a = Args::default();
-        while let Some(arg) = args.next() {
-            let mut val = || args.next().ok_or(format!("missing value for {arg}"));
-            match arg.as_str() {
-                "--help" | "-h" => return Err(usage().to_string()),
-                "--bbox" => {
-                    let v = val()?;
-                    let nums: Vec<f64> = v
-                        .split(',')
-                        .map(|s| s.trim().parse().map_err(|_| format!("bad number {s}")))
-                        .collect::<Result<_, _>>()?;
-                    if nums.len() != 4 {
-                        return Err(format!("--bbox wants 4 numbers, got {}", nums.len()));
-                    }
-                    a.bbox = Bbox::new(nums[0], nums[1], nums[2], nums[3]);
-                }
-                "--num-lines" => a.num_lines = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--elevation-pts" => {
-                    a.elevation_pts = val()?.parse().map_err(|e| format!("{e}"))?
-                }
-                "--angle" => a.viewpoint_angle = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--crop" => a.crop = true,
-                "--interpolation" => {
-                    let v: u32 = val()?.parse().map_err(|e| format!("{e}"))?;
-                    if v > 1 {
-                        return Err("only interpolation 0 and 1 are supported".into());
-                    }
-                    a.interpolation = v;
-                }
-                "--water-ntile" => a.water_ntile = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--lake-flatness" => {
-                    a.lake_flatness = val()?.parse().map_err(|e| format!("{e}"))?
-                }
-                "--vertical-ratio" => {
-                    a.vertical_ratio = val()?.parse().map_err(|e| format!("{e}"))?
-                }
-                "--linewidth" => a.linewidth_pt = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--color" => a.color = val()?,
-                "--kind" => {
-                    a.kind = match val()?.as_str() {
-                        "gradient" => ColorKind::Gradient,
-                        "elevation" => ColorKind::Elevation,
-                        other => return Err(format!("bad --kind {other:?}")),
-                    }
-                }
-                "--background" => a.background = val()?,
-                "--label" => a.label = val()?,
-                "--label-color" => a.label_color = Some(val()?),
-                "--label-x" => a.label_x = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--label-y" => a.label_y = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--label-size" => a.label_size_pt = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--size-scale" => a.size_scale = val()?.parse().map_err(|e| format!("{e}"))?,
-                "--annotate" => {
-                    let v = val()?;
-                    let parts: Vec<&str> = v.splitn(3, ',').collect();
-                    if parts.len() != 3 {
-                        return Err("--annotate wants lon,lat,text".into());
-                    }
-                    a.annotation = Some((
-                        parts[0].trim().parse().map_err(|e| format!("{e}"))?,
-                        parts[1].trim().parse().map_err(|e| format!("{e}"))?,
-                        parts[2].to_string(),
-                    ));
-                }
-                "--srtm-base" => a.srtm_base = val()?,
-                "--cache-dir" => a.cache_dir = Some(val()?),
-                "--fixture-dir" => a.fixture_dir = Some(val()?),
-                "--out" => a.out = val()?,
-                other => return Err(format!("unknown argument {other:?}\n\n{}", usage())),
-            }
-        }
-        Ok(a)
+fn parse_bbox(value: &str) -> Result<Bbox, String> {
+    let nums: Vec<f64> = value
+        .split(',')
+        .map(|part| {
+            part.trim()
+                .parse()
+                .map_err(|_| format!("bad number {:?} in bbox", part.trim()))
+        })
+        .collect::<Result<_, _>>()?;
+    match nums.as_slice() {
+        [lon0, lat0, lon1, lat1] => Ok(Bbox::new(*lon0, *lat0, *lon1, *lat1)),
+        _ => Err(format!(
+            "bbox wants 4 comma-separated numbers, got {}",
+            nums.len()
+        )),
     }
+}
+
+fn parse_annotation(value: &str) -> Result<AnnotationArg, String> {
+    let mut parts = value.splitn(3, ',');
+    let (Some(lon), Some(lat), Some(text)) = (parts.next(), parts.next(), parts.next()) else {
+        return Err("annotate wants \"lon,lat,text\"".into());
+    };
+    Ok(AnnotationArg {
+        lon: lon
+            .trim()
+            .parse()
+            .map_err(|_| format!("bad longitude {lon:?}"))?,
+        lat: lat
+            .trim()
+            .parse()
+            .map_err(|_| format!("bad latitude {lat:?}"))?,
+        text: text.to_string(),
+    })
+}
+
+/// Print an error and exit with `code` (matching clap's parse-error code 2).
+fn die(code: i32, message: &str) -> ! {
+    eprintln!("error: {message}");
+    std::process::exit(code);
 }
 
 fn main() {
-    let args = match Args::parse(std::env::args().skip(1)) {
-        Ok(a) => a,
-        Err(msg) => {
-            let is_help = msg.contains("USAGE") || msg.contains("ridge render");
-            eprintln!("{msg}");
-            std::process::exit(if is_help { 0 } else { 2 });
-        }
-    };
+    let args = Args::parse();
+    let bbox = args.bbox.unwrap_or(DEFAULT_BBOX);
 
-    let source: Box<dyn srtm::TileSource> = if let Some(dir) = &args.fixture_dir {
-        Box::new(srtm::DirSource::new(dir))
-    } else {
-        let cache_dir = match args.cache_dir.clone() {
-            Some(d) => std::path::PathBuf::from(d),
-            None => {
+    let source: Box<dyn srtm::TileSource> = match &args.fixture_dir {
+        Some(dir) => Box::new(srtm::DirSource::new(dir)),
+        None => {
+            let cache_dir = args.cache_dir.clone().unwrap_or_else(|| {
                 let dir = srtm::default_cache_dir();
                 match srtm::migrate_legacy_cache(&dir) {
                     Ok(0) => {}
@@ -205,43 +231,28 @@ fn main() {
                     Err(e) => eprintln!("warning: couldn't move the old tile cache: {e}"),
                 }
                 dir
-            }
-        };
-        let bases: Vec<&str> = args.srtm_base.split(',').map(str::trim).collect();
-        match srtm::RemoteSource::new(&bases, &cache_dir) {
-            Ok(src) => Box::new(src),
-            Err(e) => {
-                eprintln!("error: {e}");
-                std::process::exit(1);
+            });
+            let bases: Vec<&str> = args.srtm_base.split(',').map(str::trim).collect();
+            match srtm::RemoteSource::new(&bases, &cache_dir) {
+                Ok(src) => Box::new(src),
+                Err(e) => die(1, &e.to_string()),
             }
         }
     };
 
-    let line_color = match parse_color(&args.color) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: {e}");
-            std::process::exit(2);
-        }
-    };
-    let label_color = match &args.label_color {
-        Some(name) => match parse_color(name) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                eprintln!("error: {e}");
-                std::process::exit(2);
-            }
-        },
-        None => None,
-    };
+    let line_color = LineColor::parse(&args.color)
+        .unwrap_or_else(|| die(2, &format!("unknown color {:?}", args.color)));
+    let label_color = args.label_color.as_ref().map(|name| {
+        LineColor::parse(name).unwrap_or_else(|| die(2, &format!("unknown color {name:?}")))
+    });
     let background = ridge_core::colormap::hex_checked(&args.background).unwrap_or([236, 232, 236]);
 
-    let scene = match build_scene(
+    let scene = build_scene(
         source.as_ref(),
-        &args.bbox,
+        &bbox,
         args.num_lines,
         args.elevation_pts,
-        args.viewpoint_angle,
+        args.angle,
         args.crop,
         args.interpolation,
         false,
@@ -249,13 +260,8 @@ fn main() {
         args.lake_flatness,
         args.vertical_ratio,
         args.size_scale,
-    ) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: {e}");
-            std::process::exit(1);
-        }
-    };
+    )
+    .unwrap_or_else(|e| die(1, &e.to_string()));
 
     let label_color = label_color
         .map(|c| match c {
@@ -264,15 +270,13 @@ fn main() {
         })
         .unwrap_or_else(|| scene.label_color(&line_color));
 
-    let annotation = args.annotation.map(|(lon, lat, text)| {
-        let (lon0, lon1) = args.bbox.longs();
-        let (lat0, lat1) = args.bbox.lats();
-        let x = (lon - lon0) / (lon1 - lon0);
-        let y = (lat - lat0) / (lat1 - lat0);
+    let annotation = args.annotate.as_ref().map(|a| {
+        let (lon0, lon1) = bbox.longs();
+        let (lat0, lat1) = bbox.lats();
         Annotation {
-            label: text,
-            x,
-            y,
+            label: a.text.clone(),
+            x: (a.lon - lon0) / (lon1 - lon0),
+            y: (a.lat - lat0) / (lat1 - lat0),
             x_offset: 0.005,
             y_offset: 0.005,
             label_size_pt: 20.0,
@@ -284,9 +288,9 @@ fn main() {
 
     let style = PlotStyle {
         line: LineColorSpec::from(&line_color),
-        kind: args.kind,
+        kind: args.kind.into(),
         background,
-        linewidth_pt: args.linewidth_pt,
+        linewidth_pt: args.linewidth,
         size_scale: args.size_scale,
         label: if args.label.is_empty() {
             None
@@ -296,7 +300,7 @@ fn main() {
                 color: label_color,
                 x: args.label_x,
                 y: args.label_y,
-                size_pt: args.label_size_pt,
+                size_pt: args.label_size,
                 vertical_alignment: VAlign::Bottom,
                 font_family: "Cinzel".into(),
                 background: true,
@@ -307,14 +311,259 @@ fn main() {
 
     let svg = render_svg(&scene, &style);
     if let Err(e) = std::fs::write(&args.out, &svg) {
-        eprintln!("error writing {}: {e}", args.out);
-        std::process::exit(1);
+        die(1, &format!("writing {}: {e}", args.out.display()));
     }
     println!(
         "wrote {} ({} rows x {} points, {:.1} KiB)",
-        args.out,
+        args.out.display(),
         scene.rows.len(),
         scene.n_points,
         svg.len() as f64 / 1024.0
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    fn parse(argv: &[&str]) -> Result<Args, clap::Error> {
+        Args::try_parse_from(std::iter::once("render").chain(argv.iter().copied()))
+    }
+
+    #[test]
+    fn schema_is_well_formed() {
+        // clap's own invariant checker: duplicate/conflicting args, unusable
+        // defaults, etc. Recommended by the clap book over a bespoke test.
+        Args::command().debug_assert();
+    }
+
+    #[test]
+    fn defaults_match_upstream() {
+        let a = parse(&[]).unwrap();
+        assert_eq!(a.num_lines, 80);
+        assert_eq!(a.elevation_pts, 300);
+        assert_eq!(a.angle, 0.0);
+        assert_eq!(a.interpolation, 0);
+        assert_eq!(a.water_ntile, 10.0);
+        assert_eq!(a.lake_flatness, 3);
+        assert_eq!(a.vertical_ratio, 40.0);
+        assert_eq!(a.linewidth, 2.0);
+        assert_eq!(a.color, "black");
+        assert!(matches!(a.kind, Kind::Gradient));
+        assert_eq!(a.background, "#ece9ec");
+        assert_eq!(a.label, "The White\nMountains");
+        assert_eq!(a.label_x, 0.62);
+        assert_eq!(a.label_y, 0.15);
+        assert_eq!(a.label_size, 60.0);
+        assert_eq!(a.size_scale, DEFAULT_SIZE_SCALE);
+        assert_eq!(a.out, PathBuf::from("ridge.svg"));
+        assert!(a.bbox.is_none());
+        assert!(a.annotate.is_none());
+        assert!(a.label_color.is_none());
+        assert!(a.cache_dir.is_none());
+        assert!(a.fixture_dir.is_none());
+        assert!(!a.crop);
+    }
+
+    #[test]
+    fn hyphen_leading_values_are_accepted() {
+        // These flags set `allow_hyphen_values`; without it clap reads the
+        // value as a flag. Negative coordinates and angles are the norm.
+        let a = parse(&[
+            "--bbox",
+            "-71.9,43.7,-70.9,44.4",
+            "--angle",
+            "-33",
+            "--annotate",
+            "-71.3173,44.2946,Mt Washington",
+            "--label-x",
+            "-0.1",
+        ])
+        .unwrap();
+        assert_eq!(a.bbox, Some(Bbox::new(-71.9, 43.7, -70.9, 44.4)));
+        assert_eq!(a.angle, -33.0);
+        assert_eq!(a.label_x, -0.1);
+        let ann = a.annotate.as_ref().unwrap();
+        assert_eq!(
+            (ann.lon, ann.lat, ann.text.as_str()),
+            (-71.3173, 44.2946, "Mt Washington")
+        );
+    }
+
+    #[test]
+    fn every_option_round_trips() {
+        let a = parse(&[
+            "--bbox",
+            "1,2,3,4",
+            "--num-lines",
+            "12",
+            "--elevation-pts",
+            "34",
+            "--angle",
+            "90",
+            "--crop",
+            "--interpolation",
+            "1",
+            "--water-ntile",
+            "5",
+            "--lake-flatness",
+            "7",
+            "--vertical-ratio",
+            "120",
+            "--linewidth",
+            "3",
+            "--color",
+            "ocean",
+            "--kind",
+            "elevation",
+            "--background",
+            "#000000",
+            "--label",
+            "Hello\nWorld",
+            "--label-color",
+            "white",
+            "--label-x",
+            "0.1",
+            "--label-y",
+            "0.2",
+            "--label-size",
+            "30",
+            "--size-scale",
+            "10",
+            "--annotate",
+            "1,2,Summit",
+            "--srtm-base",
+            "https://example.test/",
+            "--cache-dir",
+            "/tmp/cache",
+            "--fixture-dir",
+            "/tmp/tiles",
+            "--out",
+            "out.svg",
+        ])
+        .unwrap();
+        assert_eq!(a.bbox, Some(Bbox::new(1.0, 2.0, 3.0, 4.0)));
+        assert_eq!(a.num_lines, 12);
+        assert_eq!(a.elevation_pts, 34);
+        assert_eq!(a.angle, 90.0);
+        assert!(a.crop);
+        assert_eq!(a.interpolation, 1);
+        assert_eq!(a.water_ntile, 5.0);
+        assert_eq!(a.lake_flatness, 7);
+        assert_eq!(a.vertical_ratio, 120.0);
+        assert_eq!(a.linewidth, 3.0);
+        assert_eq!(a.color, "ocean");
+        assert!(matches!(a.kind, Kind::Elevation));
+        assert_eq!(a.background, "#000000");
+        assert_eq!(a.label, "Hello\nWorld");
+        assert_eq!(a.label_color.as_deref(), Some("white"));
+        assert_eq!((a.label_x, a.label_y, a.label_size), (0.1, 0.2, 30.0));
+        assert_eq!(a.size_scale, 10.0);
+        let ann = a.annotate.as_ref().unwrap();
+        assert_eq!((ann.lon, ann.lat, ann.text.as_str()), (1.0, 2.0, "Summit"));
+        assert_eq!(a.srtm_base, "https://example.test/");
+        assert_eq!(
+            a.cache_dir.as_deref(),
+            Some(std::path::Path::new("/tmp/cache"))
+        );
+        assert_eq!(
+            a.fixture_dir.as_deref(),
+            Some(std::path::Path::new("/tmp/tiles"))
+        );
+        assert_eq!(a.out, PathBuf::from("out.svg"));
+    }
+
+    #[test]
+    fn invalid_input_is_rejected() {
+        assert!(parse(&["--interpolation", "2"]).is_err());
+        assert!(parse(&["--kind", "bogus"]).is_err());
+        assert!(parse(&["--nope"]).is_err());
+        assert!(parse(&["--num-lines", "abc"]).is_err());
+        assert!(parse(&["--num-lines"]).is_err(), "missing value");
+    }
+
+    #[test]
+    fn parse_bbox_accepts_four_numbers_and_tolerates_spaces() {
+        assert_eq!(
+            parse_bbox("1,2,3,4").unwrap(),
+            Bbox::new(1.0, 2.0, 3.0, 4.0)
+        );
+        assert_eq!(
+            parse_bbox(" 1 , 2 , 3 , 4 ").unwrap(),
+            Bbox::new(1.0, 2.0, 3.0, 4.0)
+        );
+    }
+
+    #[test]
+    fn parse_bbox_rejects_wrong_arity_and_garbage() {
+        for bad in ["", "1", "1,2", "1,2,3", "1,2,3,4,5", "a,b,c,d", "1,2,3,"] {
+            assert!(parse_bbox(bad).is_err(), "should reject {bad:?}");
+        }
+    }
+
+    #[test]
+    fn parse_bbox_defers_geographic_validity() {
+        // The parser only enforces arity + numeric-ness; it happily accepts
+        // NaN, and `Bbox::is_valid` (checked later by `build_scene`) is what
+        // rejects unusable boxes.
+        assert!(parse_bbox("nan,0,0,0").is_ok());
+        assert!(!parse_bbox("nan,0,0,0").unwrap().is_valid());
+        assert!(!parse_bbox("10,10,0,0").unwrap().is_valid());
+    }
+
+    #[test]
+    fn parse_annotation_keeps_commas_in_text() {
+        let a = parse_annotation("-71.3,44.3,Mt, Washington").unwrap();
+        assert_eq!(
+            (a.lon, a.lat, a.text.as_str()),
+            (-71.3, 44.3, "Mt, Washington")
+        );
+    }
+
+    #[test]
+    fn parse_annotation_rejects_bad_shapes() {
+        for bad in ["", "1", "1,2", "x,2,t", "1,y,t"] {
+            assert!(parse_annotation(bad).is_err(), "should reject {bad:?}");
+        }
+    }
+
+    /// Deterministic stand-in for a fuzzer: throw a few thousand random
+    /// separator-heavy strings at the parsers and the full argv pipeline and
+    /// assert nothing panics. Seeded, so a failure reproduces.
+    #[test]
+    fn parsing_never_panics_on_arbitrary_input() {
+        let mut rng = SplitMix64(0x9e37_79b9_7f4a_7c15);
+        for _ in 0..10_000 {
+            let s = random_nasty_string(&mut rng);
+            let _ = parse_bbox(&s);
+            let _ = parse_annotation(&s);
+            let _ = Args::try_parse_from(["render", s.as_str()]);
+            let _ = Args::try_parse_from(["render", "--bbox", s.as_str()]);
+            let _ = Args::try_parse_from(["render", "--annotate", s.as_str()]);
+            let _ = Args::try_parse_from(["render", "--label", s.as_str()]);
+        }
+    }
+
+    /// A fixed-seed splitmix64 — enough for reproducible input generation
+    /// without pulling in a dependency.
+    struct SplitMix64(u64);
+
+    impl SplitMix64 {
+        fn next_u64(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+    }
+
+    fn random_nasty_string(rng: &mut SplitMix64) -> String {
+        const ALPHABET: &[u8] = b"0123456789.,-+ eE_/:;\t\n#\"'\\{}[]()";
+        let len = (rng.next_u64() % 24) as usize;
+        (0..len)
+            .map(|_| ALPHABET[(rng.next_u64() as usize) % ALPHABET.len()] as char)
+            .collect()
+    }
 }
