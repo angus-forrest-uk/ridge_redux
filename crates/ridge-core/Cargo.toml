@@ -18,6 +18,7 @@ thiserror = { workspace = true }
 flate2 = { workspace = true }
 colorous = { workspace = true }
 ureq = { version = "2", default-features = false, features = ["tls", "gzip"] }
+dirs = "7.0.0"
 
 [dev-dependencies]
 serde_json = { workspace = true }

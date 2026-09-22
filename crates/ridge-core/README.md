@@ -51,7 +51,7 @@ use ridge_core::svg::{render_svg, LineColorSpec, PlotStyle};
 use ridge_core::Bbox;
 
 fn main() -> ridge_core::Result<()> {
-    // Downloads tiles on first use and caches them in ~/.cache/ridge-redux/srtm.
+    // Downloads tiles on first use and caches them in srtm::default_cache_dir().
     let source = RemoteSource::default_paths()?;
     let white_mountains = Bbox::new(-71.928864, 43.758201, -70.957947, 44.465151);
     let scene = build_scene(

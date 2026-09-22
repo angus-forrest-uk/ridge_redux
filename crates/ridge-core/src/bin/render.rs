@@ -95,7 +95,7 @@ OPTIONS:
   --size-scale IN                Figure width in inches (default 20)
   --annotate "lon,lat,TEXT"      Dot + label at a coordinate
   --srtm-base URL                Tile mirror (default kurviger SRTM1)
-  --cache-dir DIR                Tile cache (default ~/.cache/ridge-redux/srtm)
+  --cache-dir DIR                Tile cache (default: ridge-redux/srtm in the OS cache dir)
   --fixture-dir DIR              Read .hgt tiles from DIR instead (offline)
   --out FILE                     Output SVG (default ridge.svg)
 "#
@@ -197,7 +197,15 @@ fn main() {
     } else {
         let cache_dir = match args.cache_dir.clone() {
             Some(d) => std::path::PathBuf::from(d),
-            None => dirs_default(),
+            None => {
+                let dir = srtm::default_cache_dir();
+                match srtm::migrate_legacy_cache(&dir) {
+                    Ok(0) => {}
+                    Ok(n) => eprintln!("moved {n} cached tile(s) to {}", dir.display()),
+                    Err(e) => eprintln!("warning: couldn't move the old tile cache: {e}"),
+                }
+                dir
+            }
         };
         let bases: Vec<&str> = args.srtm_base.split(',').map(str::trim).collect();
         match srtm::RemoteSource::new(&bases, &cache_dir) {
@@ -309,15 +317,4 @@ fn main() {
         scene.n_points,
         svg.len() as f64 / 1024.0
     );
-}
-
-fn dirs_default() -> std::path::PathBuf {
-    std::env::var("XDG_CACHE_HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))
-                .join(".cache")
-        })
-        .join("ridge-redux")
-        .join("srtm")
 }

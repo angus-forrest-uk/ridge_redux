@@ -42,6 +42,16 @@ ridge_redux
 # opens http://127.0.0.1:8420 in your browser
 ```
 
+**Uninstall**
+
+`cargo uninstall` removes the program but can't touch the tile cache, so
+clear that first. `clean-cache` shows its size and asks before deleting:
+
+```bash
+ridge_redux clean-cache
+cargo uninstall ridge_redux
+```
+
 **From source**
 
 ```bash
@@ -80,9 +90,9 @@ needs signing, and every platform Rust supports works the same way.
 - **Compute.** The server samples the elevation grid again on every change of
   location or resolution. That's cheap on your CPU. A hosted service would pay
   for it on every request, from every visitor.
-- **Caching is personal.** Your cache (`~/.cache/ridge-redux/srtm/`) only
-  holds the places *you* look at. A shared cache has to hold everyone's
-  places, which brings back the cost problem.
+- **Caching is personal.** Your tile cache only holds the places *you* look
+  at. A shared cache has to hold everyone's places, which brings back the
+  cost problem.
 - **Nothing to keep running.** A local tool costs nothing while nobody is
   using it, and there's no service to keep up or protect from abuse.
 
@@ -93,7 +103,9 @@ to `127.0.0.1` by default. Don't expose it on an untrusted network with
 ## Using it
 
 On first use the server downloads SRTM elevation tiles on demand and caches
-them under `~/.cache/ridge-redux/srtm/` (one fetch per tile, ever).
+them in `ridge-redux/srtm` under your OS cache directory (one fetch per
+tile, ever): `~/.cache` on Linux, `~/Library/Caches` on macOS and
+`%LOCALAPPDATA%` on Windows. `--cache-dir` puts it somewhere else.
 Drag to pan, wheel to zoom: both instant, purely client-side. The
 **viewpoint-angle, water and relief sliders are also instant**: the server
 ships the raw elevation grid once per location/resolution

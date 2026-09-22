@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{Error, Result};
@@ -231,13 +231,9 @@ impl RemoteSource {
         })
     }
 
-    /// Default mirror and `~/.cache/ridge-redux/srtm`.
+    /// Default mirror and [`default_cache_dir`].
     pub fn default_paths() -> Result<Self> {
-        let cache = std::env::var("XDG_CACHE_HOME")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| dirs_home().join(".cache"))
-            .join("ridge-redux")
-            .join("srtm");
+        let cache = default_cache_dir();
         Self::new(
             &[
                 "https://srtm.kurviger.de/SRTM1/",
@@ -376,10 +372,104 @@ fn scan_hrefs(page: &str) -> Vec<String> {
     out
 }
 
-fn dirs_home() -> PathBuf {
-    std::env::var("HOME")
+/// Where downloaded tiles are kept by default: `ridge-redux/srtm` in the
+/// platform's cache directory. That's `$XDG_CACHE_HOME` or `~/.cache` on
+/// Linux, `~/Library/Caches` on macOS and `%LOCALAPPDATA%` on Windows; the
+/// system temp directory if there's none.
+pub fn default_cache_dir() -> PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("ridge-redux")
+        .join("srtm")
+}
+
+/// The default cache before 0.1.1, on every platform: `$XDG_CACHE_HOME`,
+/// else `$HOME/.cache`, else `/tmp/.cache`. Only Linux matches
+/// [`default_cache_dir`]; [`migrate_legacy_cache`] moves the others.
+pub fn legacy_cache_dir() -> PathBuf {
+    std::env::var("XDG_CACHE_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"))
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("/tmp"))
+                .join(".cache")
+        })
+        .join("ridge-redux")
+        .join("srtm")
+}
+
+/// Move tiles from [`legacy_cache_dir`] into `to`, then remove the legacy
+/// directory if that empties it. Tiles `to` already has are dropped, not
+/// copied over. Returns how many tiles moved; 0 when there's nothing to do.
+pub fn migrate_legacy_cache(to: &Path) -> std::io::Result<usize> {
+    migrate_cache(&legacy_cache_dir(), to)
+}
+
+fn migrate_cache(from: &Path, to: &Path) -> std::io::Result<usize> {
+    if !from.is_dir() || same_dir(from, to) {
+        return Ok(0);
+    }
+    std::fs::create_dir_all(to)?;
+    let mut moved = 0;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let src = entry.path();
+        let dest = to.join(entry.file_name());
+        if dest.exists() {
+            std::fs::remove_file(&src)?;
+            continue;
+        }
+        // A rename can't cross filesystems (a different drive, say).
+        if std::fs::rename(&src, &dest).is_err() {
+            std::fs::copy(&src, &dest)?;
+            std::fs::remove_file(&src)?;
+        }
+        moved += 1;
+    }
+    remove_cache_dirs(from);
+    Ok(moved)
+}
+
+/// Delete a tile cache directory, and its `ridge-redux` parent if that's
+/// left empty. Returns the number of files and bytes freed.
+pub fn remove_cache(dir: &Path) -> std::io::Result<(usize, u64)> {
+    let (files, bytes) = cache_size(dir)?;
+    std::fs::remove_dir_all(dir)?;
+    remove_cache_dirs(dir);
+    Ok((files, bytes))
+}
+
+/// Files and bytes in a tile cache directory (not recursive: tiles are flat).
+pub fn cache_size(dir: &Path) -> std::io::Result<(usize, u64)> {
+    let mut files = 0;
+    let mut bytes = 0;
+    for entry in std::fs::read_dir(dir)? {
+        let meta = entry?.metadata()?;
+        if meta.is_file() {
+            files += 1;
+            bytes += meta.len();
+        }
+    }
+    Ok((files, bytes))
+}
+
+/// Remove `dir` and then its `ridge-redux` parent, each only if empty.
+fn remove_cache_dirs(dir: &Path) {
+    let _ = std::fs::remove_dir(dir);
+    if let Some(parent) = dir.parent().filter(|p| p.ends_with("ridge-redux")) {
+        let _ = std::fs::remove_dir(parent);
+    }
+}
+
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
 }
 
 /// Minimal zip extractor: find the entry whose name ends with `want_suffix`
@@ -442,6 +532,56 @@ pub fn unzip_single(zip: &[u8], want_suffix: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir()
+            .join(format!("ridge-srtm-test-{}", std::process::id()))
+            .join(name);
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn migrate_moves_new_tiles_and_drops_duplicates() {
+        let root = scratch("migrate");
+        let from = root.join("old").join("ridge-redux").join("srtm");
+        let to = root.join("new").join("ridge-redux").join("srtm");
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::write(from.join("N44W072.hgt"), b"old").unwrap();
+        std::fs::write(from.join("N43W071.hgt"), b"old").unwrap();
+        std::fs::write(to.join("N43W071.hgt"), b"new").unwrap();
+
+        assert_eq!(migrate_cache(&from, &to).unwrap(), 1);
+        assert_eq!(std::fs::read(to.join("N44W072.hgt")).unwrap(), b"old");
+        assert_eq!(std::fs::read(to.join("N43W071.hgt")).unwrap(), b"new");
+        assert!(!from.parent().unwrap().exists(), "emptied legacy dirs go");
+        // Nothing left to move the second time.
+        assert_eq!(migrate_cache(&from, &to).unwrap(), 0);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn migrate_into_itself_is_a_no_op() {
+        let dir = scratch("same").join("ridge-redux").join("srtm");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("N44W072.hgt"), b"tile").unwrap();
+        assert_eq!(migrate_cache(&dir, &dir).unwrap(), 0);
+        assert!(dir.join("N44W072.hgt").exists());
+        std::fs::remove_dir_all(dir.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn remove_cache_reports_and_tidies() {
+        let root = scratch("remove");
+        let dir = root.join("ridge-redux").join("srtm");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("N44W072.hgt"), [0u8; 10]).unwrap();
+        std::fs::write(dir.join("N43W071.hgt"), [0u8; 5]).unwrap();
+        assert_eq!(remove_cache(&dir).unwrap(), (2, 15));
+        assert!(!root.join("ridge-redux").exists());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn tile_names_roundtrip() {

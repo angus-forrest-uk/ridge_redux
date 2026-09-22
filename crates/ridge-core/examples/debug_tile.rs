@@ -7,7 +7,7 @@ fn main() {
             "https://srtm.kurviger.de/SRTM1/",
             "https://srtm.kurviger.de/SRTM3/",
         ],
-        std::path::PathBuf::from("/tmp/ridge-debug-cache"),
+        std::env::temp_dir().join("ridge-debug-cache"),
     )
     .unwrap();
     match src.load_or_download(44, -72) {

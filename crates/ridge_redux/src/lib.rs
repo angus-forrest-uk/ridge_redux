@@ -9,12 +9,14 @@ pub mod api;
 mod frontend;
 pub mod state;
 
+use std::io::{BufRead, IsTerminal, Write};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use axum::routing::{get, post};
 use axum::Router;
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use ridge_core::srtm;
 use tower_http::compression::CompressionLayer;
 use tower_http::trace::TraceLayer;
 
@@ -36,6 +38,8 @@ pub struct ServerConfig {
 #[derive(Parser, Debug)]
 #[command(name = "ridge_redux", version, about)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
     /// Address to listen on [default: 127.0.0.1:8420, or a free port if taken]
     #[arg(long, value_name = "IP:PORT")]
     addr: Option<SocketAddr>,
@@ -55,22 +59,25 @@ struct Cli {
         default_value = "https://srtm.kurviger.de/SRTM1/,https://srtm.kurviger.de/SRTM3/"
     )]
     srtm_base: String,
-    /// Where downloaded tiles are kept [default: $XDG_CACHE_HOME/ridge-redux/srtm]
-    #[arg(long, value_name = "DIR")]
+    /// Where downloaded tiles are kept [default: ridge-redux/srtm in the OS
+    /// cache dir: ~/.cache on Linux, ~/Library/Caches on macOS,
+    /// %LOCALAPPDATA% on Windows]
+    #[arg(long, value_name = "DIR", global = true)]
     cache_dir: Option<PathBuf>,
     /// Serve tiles from this directory instead of the network (offline/demo mode)
     #[arg(long, value_name = "DIR")]
     fixture_dir: Option<PathBuf>,
 }
 
-fn default_cache_dir() -> PathBuf {
-    std::env::var("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())).join(".cache")
-        })
-        .join("ridge-redux")
-        .join("srtm")
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Delete the downloaded tile cache, after asking. Run this before
+    /// `cargo uninstall ridge_redux`, which can't remove it for you.
+    CleanCache {
+        /// Don't ask; delete it
+        #[arg(long, short)]
+        yes: bool,
+    },
 }
 
 impl Cli {
@@ -79,7 +86,7 @@ impl Cli {
             addr: self.addr,
             web_dir: self.web_dir,
             srtm_base: self.srtm_base,
-            cache_dir: self.cache_dir.unwrap_or_else(default_cache_dir),
+            cache_dir: self.cache_dir.unwrap_or_else(srtm::default_cache_dir),
             fixture_dir: self.fixture_dir,
             open_browser: !self.no_open,
         }
@@ -103,6 +110,17 @@ pub async fn run() {
     // Prefetching is a startup step, not server config: `ServerConfig` is
     // public and built with struct literals, so a new field would break them.
     let cli = Cli::parse();
+    if let Some(Command::CleanCache { yes }) = cli.command {
+        std::process::exit(clean_cache(cli.cache_dir.as_deref(), yes));
+    }
+    if cli.cache_dir.is_none() && cli.fixture_dir.is_none() {
+        let dir = srtm::default_cache_dir();
+        match srtm::migrate_legacy_cache(&dir) {
+            Ok(0) => {}
+            Ok(n) => tracing::info!("moved {} to {}", tiles(n), dir.display()),
+            Err(e) => tracing::warn!("couldn't move the old tile cache: {e}"),
+        }
+    }
     let prefetch = !cli.no_prefetch;
     let config = cli.into_config();
     let state = state::AppState::new(&config);
@@ -136,6 +154,73 @@ pub async fn run() {
         }
     }
     axum::serve(listener, app).await.expect("server error");
+}
+
+/// `ridge_redux clean-cache`: delete the tile cache (`--cache-dir`, or the
+/// default and any pre-0.1.1 one), asking first unless `yes`. Returns the
+/// exit code.
+fn clean_cache(cache_dir: Option<&Path>, yes: bool) -> i32 {
+    let mut dirs = match cache_dir {
+        Some(dir) => vec![dir.to_path_buf()],
+        None => vec![srtm::default_cache_dir(), srtm::legacy_cache_dir()],
+    };
+    dirs.dedup();
+    dirs.retain(|d| d.is_dir());
+    if dirs.is_empty() {
+        println!("No tile cache to delete.");
+        return 0;
+    }
+    for dir in &dirs {
+        match srtm::cache_size(dir) {
+            Ok((files, bytes)) => {
+                println!("{}: {files} tiles, {}", dir.display(), human_bytes(bytes))
+            }
+            Err(e) => println!("{}: can't read it ({e})", dir.display()),
+        }
+    }
+    if !yes {
+        if !std::io::stdin().is_terminal() {
+            eprintln!("Not deleting without confirmation; pass --yes to skip the prompt.");
+            return 1;
+        }
+        print!("Delete the tile cache? Tiles are downloaded again when needed. [y/N] ");
+        let _ = std::io::stdout().flush();
+        let mut answer = String::new();
+        let _ = std::io::stdin().lock().read_line(&mut answer);
+        if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+            println!("Kept the tile cache.");
+            return 0;
+        }
+    }
+    let mut code = 0;
+    for dir in &dirs {
+        match srtm::remove_cache(dir) {
+            Ok((files, bytes)) => println!(
+                "Deleted {} ({}, {}).",
+                dir.display(),
+                tiles(files),
+                human_bytes(bytes)
+            ),
+            Err(e) => {
+                eprintln!("Couldn't delete {}: {e}", dir.display());
+                code = 1;
+            }
+        }
+    }
+    code
+}
+
+fn tiles(n: usize) -> String {
+    format!("{n} tile{}", if n == 1 { "" } else { "s" })
+}
+
+fn human_bytes(bytes: u64) -> String {
+    const MIB: f64 = 1024.0 * 1024.0;
+    if bytes as f64 >= 1024.0 * MIB {
+        format!("{:.1} GiB", bytes as f64 / (1024.0 * MIB))
+    } else {
+        format!("{:.1} MiB", bytes as f64 / MIB)
+    }
 }
 
 const DEFAULT_ADDR: SocketAddr =
