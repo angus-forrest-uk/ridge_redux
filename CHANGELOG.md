@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.3.2...ridge_redux-v0.4.0) - 2026-09-23
+
+### Added
+
+- *(render)* make the legacy frame crop a clip_to_land toggle
+- *(web)* export and import the view configuration
+
+### Fixed
+
+- *(api)* carve the plane view window from the disc centre
+- *(render)* frame the requested window so water cannot crop the scene
+
+### Other
+
+- describe the frame toggle and correct the stale test counts
+
 ## [0.3.2](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.3.1...ridge_redux-v0.3.2) - 2026-09-22
 
 ### Other
