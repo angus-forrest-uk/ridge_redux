@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge-core-v0.3.2...ridge-core-v0.4.0) - 2026-09-23
+
+### Added
+
+- *(render)* make the legacy frame crop a clip_to_land toggle
+
+### Fixed
+
+- *(render)* frame the requested window so water cannot crop the scene
+
 ## [0.3.2](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge-core-v0.3.1...ridge-core-v0.3.2) - 2026-09-22
 
 ### Added
