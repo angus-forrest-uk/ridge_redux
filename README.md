@@ -219,6 +219,7 @@ see [`crates/ridge_redux/src/api.rs`](https://github.com/angus-forrest-uk/ridge_
   "num_lines": 80, "elevation_pts": 300,
   "viewpoint_angle": 0, "crop": false, "interpolation": 0,
   "water_ntile": 10, "lake_flatness": 3, "vertical_ratio": 40,
+  "clip_to_land": false,    // true = legacy frame, cropped to the land
   "linewidth_pt": 2,
   "line_color": "black",     // name | "#0f0f0f" | colormap: viridis, ocean, ...
   "kind": "gradient",        // or "elevation"
@@ -264,14 +265,16 @@ The port is deliberately faithful, down to the odd corners:
 - rows are flipped (south in front) and scaled by `vertical_ratio`,
 - lines step `-6` per row, colored by row index (gradient) or elevation.
 
-One thing is deliberately **not** faithful. matplotlib autoscales the axes
-around the cells it actually draws, and the legacy plot inherits that: any
-all-water column or row drops out of the frame, so a bbox covering a tile with
-no data renders its coastline alone and the `water_ntile` knob rescales the
-picture as well as the ridges. We pin the data limits to the requested window
-instead, so water, lakes and missing tiles keep their place and the frame
-never moves when a mask changes. The legacy figure for the same input is
-recorded in `fixtures/legacy/frame.json`, so the difference is measured rather
+Framing is the one thing that is optionally faithful. matplotlib autoscales
+the axes around the cells it actually draws, and the legacy plot inherits
+that: any all-water column or row drops out of the frame, so a bbox covering a
+tile with no data renders its coastline alone and the `water_ntile` knob
+rescales the picture as well as the ridges. By default we frame the whole
+requested window instead, so water, lakes and missing tiles keep their place
+and no mask can move the frame. **`clip frame to land`** (the checkbox beside
+`water ntile`, or `clip_to_land` in the API, or `--clip-to-land` on the CLI)
+switches back to the legacy composition; the two frames for the same input are
+recorded in `fixtures/legacy/frame.json`, so both sides are measured rather
 than assumed.
 
 The golden test compares our sampled White Mountains grid against the upstream
@@ -304,7 +307,7 @@ just web          # build the frontend (web/: Astro + SolidJS) into web/dist
 just run          # build the frontend, then serve the app on localhost
 just offline      # same, against the fixture tiles, with no network
 just web-dev      # frontend dev server with live reload on :4321 (API from `just run`)
-just test         # 47 Rust tests: 31 ridge-core (incl. golden parity) + 16 ridge_redux
+just test         # 73 Rust tests: 54 ridge-core (incl. golden parity) + 19 ridge_redux
 just test-web     # Vitest: app state + TS pipeline == Rust pipeline (bit-for-bit)
 just check-web    # type-check the frontend
 just coverage     # line coverage for the workspace (cargo-llvm-cov)
