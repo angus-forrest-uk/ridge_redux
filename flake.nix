@@ -1,5 +1,5 @@
 {
-  description = "Python reference environment for generating ridge-core parity fixtures";
+  description = "Python reference env for parity fixtures, plus the C toolchain cargo needs to build";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -13,8 +13,10 @@
         # `uv` manages the numpy/scipy/scikit-image environment declared in
         # scripts/pyproject.toml; python312 is provided so uv has an
         # interpreter with wheels available (no build-from-source).
+        # gcc provides the `cc` linker cargo needs (build scripts, final
+        # binaries) — on NixOS there is no system-wide cc.
         default = pkgs.mkShell {
-          packages = [ pkgs.uv pkgs.python312 ];
+          packages = [ pkgs.uv pkgs.python312 pkgs.gcc ];
         };
       });
     };
