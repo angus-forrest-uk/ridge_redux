@@ -331,6 +331,7 @@ mod tests {
             3,
             40.0,
             20.0,
+            crate::geometry::Frame::Window,
         )
         .unwrap()
     }

@@ -69,6 +69,11 @@ pub struct RenderParams {
     pub region: String,
     /// Disc side in degrees; 0 = bbox diagonal.
     pub span_deg: f64,
+    /// Frame the axes around the land only, the way the legacy matplotlib plot
+    /// does: water and tiles with no data then crop the picture, and
+    /// `water_ntile` rescales it as well as the ridges. Off (the default)
+    /// frames the whole requested window, so nothing masking-related moves it.
+    pub clip_to_land: bool,
 }
 
 fn d_zero() -> f64 {
@@ -117,6 +122,7 @@ impl Default for RenderParams {
             fit: "reshape".into(),
             region: "rect".into(),
             span_deg: 0.0,
+            clip_to_land: false,
         }
     }
 }
@@ -138,6 +144,15 @@ impl RenderParams {
 
     fn is_disc(&self) -> bool {
         self.region == "disc"
+    }
+
+    /// How the figure frame is fitted: the requested window, or the land only.
+    fn frame(&self) -> ridge_core::geometry::Frame {
+        if self.clip_to_land {
+            ridge_core::geometry::Frame::Land
+        } else {
+            ridge_core::geometry::Frame::Window
+        }
     }
 
     /// Underlying region side in degrees (explicit span or bbox diagonal).
@@ -386,6 +401,7 @@ fn preprocess_and_scene(
         &processed,
         ratio,
         params.size_scale,
+        params.frame(),
     ))
 }
 
@@ -586,6 +602,7 @@ async fn render_scene(
                 params.num_lines as f64 / params.elevation_pts as f64
             },
             params.size_scale,
+            params.frame(),
         );
         Ok(scene)
     } else {

@@ -45,7 +45,7 @@ on a map, rotate and restyle live), use `cargo install ridge_redux`.
 
 ```rust,no_run
 use ridge_core::colormap::{hex, LineColor};
-use ridge_core::geometry::{build_scene, ColorKind};
+use ridge_core::geometry::{build_scene, ColorKind, Frame};
 use ridge_core::srtm::RemoteSource;
 use ridge_core::svg::{render_svg, LineColorSpec, PlotStyle};
 use ridge_core::Bbox;
@@ -61,6 +61,7 @@ fn main() -> ridge_core::Result<()> {
         0.0, false, 0, false, // viewpoint angle, crop, interpolation, lock resolution
         10.0, 3, 40.0,        // water percentile, lake flatness, vertical ratio
         20.0,                 // figure width in inches
+        Frame::Window,        // frame the whole bbox; Frame::Land = legacy crop
     )?;
     let style = PlotStyle {
         line: LineColorSpec::from(&LineColor::parse("black").unwrap()),

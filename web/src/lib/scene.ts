@@ -97,7 +97,7 @@ export function buildScene(raw: Raw, prepared: Prepared, params: Params): Scene 
     grid = sampleWindow(rotated, raw.nrows, d.lat0, d.lon0, d.span, req.bbox, vrows, vcols);
   }
   const rows = buildRows(grid, vrows, vcols);
-  const bounds = frameBounds(rows);
+  const bounds = frameBounds(rows, params.clip_to_land);
   if (bounds.empty) return null;
   const [lon0, lat0, lon1, lat1] = req.bbox;
   const bboxRatio = req.region === "disc" ? 1.0 : (lat1 - lat0) / (lon1 - lon0);

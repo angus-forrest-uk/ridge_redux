@@ -56,6 +56,7 @@ describe("local changes redraw without fetching", () => {
     ["vertical_ratio", 120],
     ["line_color", "viridis"],
     ["size_scale", 30],
+    ["clip_to_land", true],
   ] as const)("%s", async (key, value) => {
     const before = state.scene();
     state.set(key, value);

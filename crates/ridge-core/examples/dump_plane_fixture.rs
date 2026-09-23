@@ -17,7 +17,12 @@ fn main() {
     let rotated = ridge_core::rotate::rotate_fixed_plane(&processed, -33.0, 0);
 
     // Scene via RidgeScene::from_grid for layout parity too.
-    let scene = ridge_core::RidgeScene::from_grid(&rotated, 24.0 / 30.0, 20.0);
+    let scene = ridge_core::RidgeScene::from_grid(
+        &rotated,
+        24.0 / 30.0,
+        20.0,
+        ridge_core::geometry::Frame::Window,
+    );
 
     let to_val = |g: &Array2<f64>| {
         g.rows()

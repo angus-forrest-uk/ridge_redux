@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
 
 use ridge_core::colormap::LineColor;
-use ridge_core::geometry::{build_scene, ColorKind, DEFAULT_SIZE_SCALE};
+use ridge_core::geometry::{build_scene, ColorKind, Frame, DEFAULT_SIZE_SCALE};
 use ridge_core::svg::{render_svg, Annotation, LabelStyle, LineColorSpec, PlotStyle, VAlign};
 use ridge_core::{srtm, Bbox, DEFAULT_BBOX};
 
@@ -117,6 +117,11 @@ struct Args {
     /// Figure width in inches
     #[arg(long, value_name = "IN", default_value_t = DEFAULT_SIZE_SCALE)]
     size_scale: f64,
+
+    /// Clip the frame to the land, as the legacy matplotlib plot does: water
+    /// and missing tiles then crop the picture instead of holding their place
+    #[arg(long)]
+    clip_to_land: bool,
 
     /// Dot + label at a coordinate, written "lon,lat,text"
     #[arg(
@@ -260,6 +265,11 @@ fn main() {
         args.lake_flatness,
         args.vertical_ratio,
         args.size_scale,
+        if args.clip_to_land {
+            Frame::Land
+        } else {
+            Frame::Window
+        },
     )
     .unwrap_or_else(|e| die(1, &e.to_string()));
 

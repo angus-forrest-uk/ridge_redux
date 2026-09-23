@@ -52,7 +52,12 @@ fn main() {
         }
         let mid = (ymin + ymax) / 2.0;
         let _ = mid;
-        let scene = ridge_core::RidgeScene::from_grid(&processed, bbox.ratio(), 20.0);
+        let scene = ridge_core::RidgeScene::from_grid(
+            &processed,
+            bbox.ratio(),
+            20.0,
+            ridge_core::geometry::Frame::Window,
+        );
         let [_, ytop] = scene.layout.ylim;
         let [xl, xr] = scene.layout.xlim;
         let width_pct = 100.0 * (xmax - xmin) / ((p - 1) as f64);

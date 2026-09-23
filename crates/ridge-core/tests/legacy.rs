@@ -3,10 +3,9 @@
 //! `fixtures/legacy/frame.json` is captured by `scripts/gen_legacy_fixture.py`
 //! running the *actual* upstream `ridge_map` package over matplotlib, so the
 //! reference is the legacy implementation rather than a snapshot of our own
-//! output. The frame is the one place ridge-core deliberately differs:
-//! matplotlib autoscales tightly around the cells it draws, which lets water
-//! crop the picture. The fixture records both frames, and this test holds us
-//! to the intended one and to the legacy figure size we do share.
+//! output. It pins both axes of the `clip_to_land` toggle: with it off we frame
+//! the whole requested window (the default), and with it on we reproduce the
+//! legacy figure to within floating point.
 //!
 //! Skipped when absent unless `RIDGE_REQUIRE_FIXTURES=1` (CI).
 
@@ -15,7 +14,7 @@ use std::path::Path;
 use ndarray::Array2;
 use serde::Deserialize;
 
-use ridge_core::geometry::{AXES_MARGIN, FIG_DPI, LINE_SPACING};
+use ridge_core::geometry::{Frame, AXES_MARGIN, FIG_DPI, LINE_SPACING};
 use ridge_core::preprocess::preprocess;
 use ridge_core::RidgeScene;
 
@@ -64,7 +63,7 @@ fn fixture() -> Option<Fixture> {
 }
 
 #[test]
-fn frame_covers_the_window_where_the_legacy_frame_clips() {
+fn clip_to_land_reproduces_the_legacy_frame() {
     let Some(f) = fixture() else {
         return;
     };
@@ -88,10 +87,11 @@ fn frame_covers_the_window_where_the_legacy_frame_clips() {
     )
     .expect("fixture input has terrain");
     let ratio = (f.bbox[3] - f.bbox[1]) / (f.bbox[2] - f.bbox[0]);
-    let scene = RidgeScene::from_grid(&processed, ratio, f.size_scale);
+    let window = RidgeScene::from_grid(&processed, ratio, f.size_scale, Frame::Window);
+    let land = RidgeScene::from_grid(&processed, ratio, f.size_scale, Frame::Land);
 
     // The fixture is only meaningful if masking really did remove whole
-    // columns and rows, i.e. that the legacy frame had something to clip.
+    // columns and rows, i.e. that there is a crop to reproduce.
     assert!(
         f.legacy_extent.xmin > 0,
         "legacy frame starts at column {}, so no water columns were dropped",
@@ -104,45 +104,60 @@ fn frame_covers_the_window_where_the_legacy_frame_clips() {
         f.legacy_extent.lowest_baseline
     );
 
-    // The figure itself is shared with the legacy run...
-    let (w, h) = (scene.layout.width_px, scene.layout.height_px);
-    assert!(
-        (w - f.expected.figure_inches[0] * FIG_DPI).abs() < 1e-9
-            && (h - f.expected.figure_inches[1] * FIG_DPI).abs() < 1e-9,
-        "figure {}x{} px, legacy says {}x{} in",
-        w,
-        h,
-        f.expected.figure_inches[0],
-        f.expected.figure_inches[1]
-    );
+    // The figure itself is shared with the legacy run, on both settings.
+    for (name, scene) in [("window", &window), ("land", &land)] {
+        let (w, h) = (scene.layout.width_px, scene.layout.height_px);
+        assert!(
+            (w - f.expected.figure_inches[0] * FIG_DPI).abs() < 1e-9
+                && (h - f.expected.figure_inches[1] * FIG_DPI).abs() < 1e-9,
+            "{name}: figure {w}x{h} px, legacy says {}x{} in",
+            f.expected.figure_inches[0],
+            f.expected.figure_inches[1]
+        );
+    }
 
-    // ...while the data limits are the deliberate deviation: the whole window
-    // with matplotlib's 5% margins, so nothing masking-related can move them.
+    // Toggled on, we agree with the legacy figure: matplotlib autoscales
+    // around the cells it draws, so the water columns and rows leave the
+    // frame. This is the equivalence the toggle exists to offer.
+    for (axis, got, want) in [
+        ("xlim", land.layout.xlim, f.expected.xlim),
+        ("ylim", land.layout.ylim, f.expected.ylim),
+    ] {
+        for (which, (g, w)) in std::iter::zip(got, want).enumerate() {
+            assert!(
+                (g - w).abs() <= 1e-9 * w.abs().max(1.0),
+                "{axis}[{which}]: clip_to_land gives {g}, legacy matplotlib gives {w}"
+            );
+        }
+    }
+
+    // Toggled off (the default), the frame is the whole requested window with
+    // matplotlib's 5% margins, so nothing masking-related can move it.
     let xmax = (ncols - 1) as f64;
     let dx = xmax * AXES_MARGIN;
     assert!(
-        (scene.layout.xlim[0] + dx).abs() < 1e-9
-            && (scene.layout.xlim[1] - (xmax + dx)).abs() < 1e-9,
+        (window.layout.xlim[0] + dx).abs() < 1e-9
+            && (window.layout.xlim[1] - (xmax + dx)).abs() < 1e-9,
         "x frame {:?} should span columns 0..{xmax} +/- {dx}",
-        scene.layout.xlim
+        window.layout.xlim
     );
     assert!(
-        scene.layout.ylim[0] < floor,
+        window.layout.ylim[0] < floor,
         "y frame {:?} should reach the window floor {floor}",
-        scene.layout.ylim
+        window.layout.ylim
     );
 
-    // And the legacy frame is measurably tighter, on both axes.
+    // ...and that really is wider than what the legacy plot showed.
     assert!(
-        f.expected.xlim[0] > scene.layout.xlim[0] + 1.0,
-        "legacy x frame {:?} was expected to clip the water columns (ours {:?})",
-        f.expected.xlim,
-        scene.layout.xlim
+        window.layout.xlim[0] < land.layout.xlim[0] - 1.0,
+        "window x frame {:?} should extend left of the land-only {:?}",
+        window.layout.xlim,
+        land.layout.xlim
     );
     assert!(
-        f.expected.ylim[0] > scene.layout.ylim[0] + 1.0,
-        "legacy y frame {:?} was expected to stop above the water rows (ours {:?})",
-        f.expected.ylim,
-        scene.layout.ylim
+        window.layout.ylim[0] < land.layout.ylim[0] - 1.0,
+        "window y frame {:?} should extend below the land-only {:?}",
+        window.layout.ylim,
+        land.layout.ylim
     );
 }

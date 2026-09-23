@@ -223,30 +223,54 @@ export function buildRows(grid: Float64Array, nrows: number, ncols: number): Row
   return rows;
 }
 
-/* Frame bounds of a row set: the whole window, not the cells that happen to
- * hold land. matplotlib — which frames the legacy plot — autoscales over the
- * drawn points only, so all-water columns and rows drop out of the frame and
- * the water_ntile knob rescales the picture as well as the ridges. Pinning
- * the frame here keeps water, lakes and voids in their place, so a bbox
- * covering a tile with no data shows that tile as flat water. Mirrors
- * ridge_core::RidgeScene::from_grid. `empty` = nothing at all to draw. */
-export function frameBounds(rows: Row[]): Bounds {
+/* Frame bounds of a row set. With `clipToLand` the axes hug the cells that
+ * hold land, which is what the legacy plot gets from matplotlib autoscaling
+ * around the points it draws: all-water columns and rows then drop out of the
+ * frame, so `water_ntile` rescales the picture. The default frames the whole
+ * requested window instead, so water, lakes and voids keep their place and
+ * masking can never move the frame. Mirrors ridge_core::RidgeScene::from_grid.
+ * `empty` = nothing at all to draw. */
+export function frameBounds(rows: Row[], clipToLand = false): Bounds {
   let ymax = -Infinity;
-  for (const row of rows) {
-    for (const y of row.y) {
+  let xmin = 0;
+  let xmax = rows.length > 0 ? rows[0].y.length - 1 : -1;
+  // Baselines step down by LINE_SPACING, so the last row is the lowest.
+  let ymin = rows.length > 0 ? rows[rows.length - 1].baseline : 0;
+
+  if (clipToLand) {
+    xmin = Infinity;
+    xmax = -Infinity;
+    ymin = Infinity;
+    for (const row of rows) {
+      let hasData = false;
+      for (let c = 0; c < row.y.length; c++) {
+        const y = row.y[c];
+        if (!Number.isFinite(y)) continue;
+        hasData = true;
+        if (y > ymax) ymax = y;
+        if (c < xmin) xmin = c;
+        if (c > xmax) xmax = c;
+      }
+      if (hasData && row.baseline < ymin) ymin = row.baseline;
+    }
+    if (xmin === Infinity) {
+      // Nothing drawable even by that reckoning: the theoretical frame.
+      xmin = 0;
+      xmax = rows.length > 0 ? rows[0].y.length - 1 : -1;
+      ymin = rows.length > 0 ? rows[rows.length - 1].baseline : 0;
+    }
+  } else {
+    for (const row of rows) {
       // NaN comparisons are false, so gaps drop out of the max.
-      if (y > ymax) ymax = y;
+      for (const y of row.y) if (y > ymax) ymax = y;
     }
   }
-  const ncols = rows.length > 0 ? rows[0].y.length : 0;
-  // Baselines step down by LINE_SPACING, so the last row is the lowest.
-  const ymin = rows.length > 0 ? rows[rows.length - 1].baseline : 0;
-  return { xmin: 0, xmax: ncols - 1, ymin, ymax, empty: ymax === -Infinity };
+
+  return { xmin, xmax, ymin, ymax, empty: ymax === -Infinity };
 }
 
-/* Figure layout (matplotlib parity): figure size, subplot rect, and data
- * limits spanning the whole window with 5% margins, so masking never moves
- * the frame. */
+/* Figure layout (matplotlib parity): figure size, subplot rect, and the data
+ * limits the frame bounds describe, with 5% margins. */
 export function buildLayout(bounds: Bounds, sizeScale: number, bboxRatio: number): Layout {
   const dx = (bounds.xmax - bounds.xmin) * AXES_MARGIN;
   const dy = (bounds.ymax - bounds.ymin) * AXES_MARGIN;

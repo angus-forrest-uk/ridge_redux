@@ -105,6 +105,21 @@ main {
   font-variant-numeric: tabular-nums;
 }
 .row input[type="color"] { flex: 1; height: 26px; padding: 1px; }
+/* The "?" beside a control: hover or focus it for the explanation. */
+.hint {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1px solid #000;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+  cursor: help;
+  user-select: none;
+}
 textarea { width: 100%; resize: vertical; }
 
 .check-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }

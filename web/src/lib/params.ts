@@ -38,6 +38,10 @@ export interface Params {
   fit: "plane";
   region: "rect" | "disc";
   span_deg: number;
+  /* Frame the axes around the land only, as the legacy matplotlib plot does:
+   * water and tiles with no data then crop the picture. Off (the default)
+   * frames the whole requested window. */
+  clip_to_land: boolean;
 }
 
 export const DEFAULTS: Params = {
@@ -65,6 +69,7 @@ export const DEFAULTS: Params = {
   fit: "plane", // export matches the browser's fixed-plane rotation
   region: "rect", // "rect" = the bbox; "disc" = rotation-invariant circle
   span_deg: 0, // disc side in degrees; 0 = bbox diagonal (nothing cut)
+  clip_to_land: false, // legacy composition: let water crop the frame
 };
 
 /* The parameters that change the sampled data, so a change needs a new

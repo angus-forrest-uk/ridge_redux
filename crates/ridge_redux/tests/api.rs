@@ -127,6 +127,62 @@ async fn preview_returns_geometry() {
 }
 
 #[tokio::test]
+async fn clip_to_land_reframes_onto_the_land_only() {
+    // A bbox that spans a tile the fixtures do not carry (lon < -72), so part
+    // of the window is open water. `clip_to_land` is the legacy composition:
+    // the frame then hugs whatever the masking left behind.
+    let app = app_with_fresh_state();
+    let base = json!({
+        "bbox": [-73.0, 43.0, -70.5, 44.5],
+        "num_lines": 20,
+        "elevation_pts": 40,
+        "fit": "plane",
+    });
+
+    async fn layout(app: axum::Router, body: serde_json::Value) -> serde_json::Value {
+        let (status, resp) = post(app, "/api/preview", body.to_string()).await;
+        assert_eq!(status, StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
+        body["layout"].clone()
+    }
+
+    let window = layout(app.clone(), base.clone()).await;
+    let mut clipped = base;
+    clipped["clip_to_land"] = json!(true);
+    let land = layout(app, clipped).await;
+
+    let limits = |l: &serde_json::Value, key: &str| -> (f64, f64) {
+        let v = l[key].as_array().unwrap();
+        (v[0].as_f64().unwrap(), v[1].as_f64().unwrap())
+    };
+    let (wx0, wx1) = limits(&window, "xlim");
+    let (lx0, lx1) = limits(&land, "xlim");
+
+    // Off (the default): every column of the window is in frame.
+    assert!(
+        wx0 < 0.0 && wx1 >= 39.0,
+        "default frame {window} should span all 40 columns"
+    );
+    // On: the frame is strictly inside it, i.e. the water moved it. That is
+    // the legacy behaviour the toggle exists to offer.
+    assert!(
+        lx0 >= wx0 && lx1 <= wx1,
+        "clip_to_land {land} should stay inside the window frame {window}"
+    );
+    assert!(
+        lx0 > wx0 || lx1 < wx1,
+        "clip_to_land {land} should tighten the frame, not match it"
+    );
+    // Only the data limits move: the figure is the same size either way.
+    for key in ["width_px", "height_px"] {
+        assert_eq!(
+            window[key], land[key],
+            "{key} should not depend on the frame"
+        );
+    }
+}
+
+#[tokio::test]
 async fn repeat_preview_hits_grid_cache() {
     let config = fixture_config();
     let state = AppState::new(&config);

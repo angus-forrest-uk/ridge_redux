@@ -5,6 +5,7 @@ import type { Bbox } from "../lib/pipeline.ts";
 import { useRidge } from "../state.ts";
 
 type NumberKey = { [K in keyof Params]-?: Params[K] extends number ? K : never }[keyof Params];
+type BooleanKey = { [K in keyof Params]-?: Params[K] extends boolean ? K : never }[keyof Params];
 
 function Section(props: { title: string; children: JSX.Element }) {
   return (
@@ -38,6 +39,22 @@ function Slider(props: { label: string; key: NumberKey; min: number; max: number
       />
       <span class="val">{params[props.key]}</span>
     </Row>
+  );
+}
+
+function Toggle(props: { label: string; key: BooleanKey; hint: string }) {
+  const { params, set } = useRidge();
+  return (
+    <div class="row">
+      <label for={props.key}>{props.label}</label>
+      <input
+        id={props.key}
+        type="checkbox"
+        checked={params[props.key]}
+        onChange={(e) => set(props.key, e.currentTarget.checked)}
+      />
+      <span class="hint" tabIndex={0} title={props.hint} aria-label={props.hint}>?</span>
+    </div>
   );
 }
 
@@ -185,6 +202,11 @@ export default function Controls() {
         <Slider label="water ntile" key="water_ntile" min={0} max={100} step={1} />
         <Slider label="lake flatness" key="lake_flatness" min={0} max={10} step={1} />
         <Slider label="vertical ratio" key="vertical_ratio" min={5} max={400} step={5} />
+        <Toggle
+          label="clip frame to land"
+          key="clip_to_land"
+          hint="Legacy compatibility: the original ridge_map lets matplotlib frame the axes around the land it draws, so water and tiles with no data crop the picture — and the water ntile rescales it. On matches that; off (the default) frames the whole selected area, so masking never moves the frame."
+        />
       </Section>
       <Section title="style">
         <LineColor />
