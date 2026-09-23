@@ -532,12 +532,21 @@ async fn render_scene(
             // Rectangle view: an anisotropic window covering the ORIGINAL
             // bbox extent at num_lines x elevation_pts -- upstream's
             // composition, sweeping over the disc.
+            //
+            // The disc is centred on the bbox CENTRE (see `sample_disc` above
+            // and the frontend's `disc()`), so that is where `sample_window`
+            // must be told its origin is. Passing the bbox's south-west corner
+            // instead shifted every sample by half the bbox extent, which
+            // pushed the terrain off the window and left most of it blank.
             let bbox = params.bbox_struct();
+            let span = params.span();
+            let center_lat = (bbox.lat0 + bbox.lat1) / 2.0;
+            let center_lon = (bbox.lon0 + bbox.lon1) / 2.0;
             Arc::new(ridge_core::grid::sample_window(
                 &rotated,
-                bbox.lat0 - params.span() / 2.0,
-                bbox.lon0 - params.span() / 2.0,
-                params.span(),
+                center_lat - span / 2.0,
+                center_lon - span / 2.0,
+                span,
                 bbox.lat0,
                 bbox.lon0,
                 bbox.lat1,

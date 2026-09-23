@@ -307,7 +307,7 @@ just web          # build the frontend (web/: Astro + SolidJS) into web/dist
 just run          # build the frontend, then serve the app on localhost
 just offline      # same, against the fixture tiles, with no network
 just web-dev      # frontend dev server with live reload on :4321 (API from `just run`)
-just test         # 73 Rust tests: 54 ridge-core (incl. golden parity) + 19 ridge_redux
+just test         # 74 Rust tests: 54 ridge-core (incl. golden parity) + 20 ridge_redux
 just test-web     # Vitest: app state + TS pipeline == Rust pipeline (bit-for-bit)
 just check-web    # type-check the frontend
 just coverage     # line coverage for the workspace (cargo-llvm-cov)

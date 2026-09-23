@@ -183,6 +183,62 @@ async fn clip_to_land_reframes_onto_the_land_only() {
 }
 
 #[tokio::test]
+async fn rect_window_reads_the_bbox_not_an_offset_region() {
+    // The underlying disc is centred on the bbox CENTRE, so the window carved
+    // out of it has to land on the same geography the reshape path samples
+    // directly. `sample_window` used to be handed the bbox's south-west corner
+    // as the grid origin, which shifted every sample by half the bbox extent
+    // and left the view half empty.
+    /// (leftmost drawn column, rightmost drawn column, rows with any data).
+    async fn summary(app: axum::Router, fit: &str) -> (usize, usize, usize) {
+        let (status, resp) = post(
+            app,
+            "/api/preview",
+            json!({
+                "fit": fit, "region": "rect",
+                "bbox": [-73.0, 43.0, -70.5, 44.5],
+                "num_lines": 24, "elevation_pts": 24,
+            })
+            .to_string(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{fit}");
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
+        let (mut min, mut max, mut rows) = (usize::MAX, 0usize, 0usize);
+        for row in body["rows"].as_array().unwrap() {
+            for (c, v) in row["y"].as_array().unwrap().iter().enumerate() {
+                if v.is_null() {
+                    continue;
+                }
+                min = min.min(c);
+                max = max.max(c);
+                rows += 1;
+                break;
+            }
+        }
+        (min, max, rows)
+    }
+
+    let plane = summary(app_with_fresh_state(), "plane").await;
+    let reshape = summary(app_with_fresh_state(), "reshape").await;
+    assert_eq!(
+        (plane.0, plane.1),
+        (reshape.0, reshape.1),
+        "the window should cover the same columns as a direct bbox sample \
+         (plane {plane:?}, reshape {reshape:?})"
+    );
+    // The water mask is decided in disc space for the plane path, so a row at
+    // the edge can differ; the extent may not.
+    assert!(
+        plane.2.abs_diff(reshape.2) <= 1,
+        "rows with data should agree (plane {plane:?}, reshape {reshape:?})"
+    );
+    // The missing-tile columns really are missing, which is what makes this a
+    // worthwhile comparison: lon < -72 has no fixture.
+    assert!(plane.0 > 0 && plane.1 < 23, "expected gaps at both edges");
+}
+
+#[tokio::test]
 async fn repeat_preview_hits_grid_cache() {
     let config = fixture_config();
     let state = AppState::new(&config);
