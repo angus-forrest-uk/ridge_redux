@@ -7,4 +7,7 @@ dependencies = [
     "numpy",
     "scipy",
     "scikit-image",
+    # Only for the legacy reference: the parity test drives the real upstream
+    # ridge_map + matplotlib to capture the figure it draws.
+    "matplotlib",
 ]

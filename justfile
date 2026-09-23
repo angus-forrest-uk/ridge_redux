@@ -46,6 +46,13 @@ fixtures:
 fixtures-parity:
     nix develop -c sh -c 'cd scripts && uv sync && uv run gen_parity_fixtures.py'
 
+# Regenerate the legacy figure fixture: the real upstream ridge_map on
+# matplotlib, which tests/legacy.rs holds the scene framing to (needs nix
+# flakes + uv; not needed to *run* the tests, which read the committed file).
+# Also adds matplotlib to the scripts environment the first time.
+fixtures-legacy:
+    nix develop -c sh -c 'cd scripts && uv sync && uv run gen_legacy_fixture.py'
+
 # Rust tests: unit, API integration and the golden upstream parity test
 test:
     cargo test --workspace --release

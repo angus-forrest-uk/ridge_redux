@@ -261,6 +261,16 @@ The port is deliberately faithful, down to the odd corners:
 - rows are flipped (south in front) and scaled by `vertical_ratio`,
 - lines step `-6` per row, colored by row index (gradient) or elevation.
 
+One thing is deliberately **not** faithful. matplotlib autoscales the axes
+around the cells it actually draws, and the legacy plot inherits that: any
+all-water column or row drops out of the frame, so a bbox covering a tile with
+no data renders its coastline alone and the `water_ntile` knob rescales the
+picture as well as the ridges. We pin the data limits to the requested window
+instead, so water, lakes and missing tiles keep their place and the frame
+never moves when a mask changes. The legacy figure for the same input is
+recorded in `fixtures/legacy/frame.json`, so the difference is measured rather
+than assumed.
+
 The golden test compares our sampled White Mountains grid against the upstream
 test fixture ([`test/test_data/new_hampshire.npz`](https://github.com/ColCarroll/ridge_map/tree/main/test/test_data)): **0/24000
 mismatches**, i.e. bit-for-bit identical sampling to Python + srtm.py.
@@ -273,6 +283,13 @@ themselves (`fixtures/parity/*.json` via `scripts/gen_parity_fixtures.py`;
 regenerate with `just fixtures-parity`) and asserted by
 `crates/ridge-core/tests/parity.rs`, so a regression fails the build instead of
 quietly changing the artwork.
+
+The scene framing is held to the legacy implementation itself:
+`scripts/gen_legacy_fixture.py` runs the real upstream `ridge_map` package on
+matplotlib (regenerate with `just fixtures-legacy`) and writes
+`fixtures/legacy/frame.json`, which `crates/ridge-core/tests/legacy.rs`
+compares against. It pins the figure size we share with upstream and the one
+deliberate difference described above.
 
 ## Development
 
@@ -289,6 +306,7 @@ just test-web     # Vitest: app state + TS pipeline == Rust pipeline (bit-for-bi
 just check-web    # type-check the frontend
 just coverage     # line coverage for the workspace (cargo-llvm-cov)
 just fixtures     # fetch the SRTM tiles for the golden parity test
+just fixtures-legacy  # regenerate the legacy figure fixture (upstream ridge_map + matplotlib)
 just fmt          # cargo fmt
 just clippy       # clippy, warnings are errors
 just ci           # everything CI runs: fmt-check, clippy, test, check-web, test-web

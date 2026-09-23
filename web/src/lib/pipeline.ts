@@ -223,29 +223,30 @@ export function buildRows(grid: Float64Array, nrows: number, ncols: number): Row
   return rows;
 }
 
-/* Content bounds of a row set: x = finite column extent, y = lowest
- * baseline with data (fills reach it) up to the highest point. */
-export function contentBounds(rows: Row[]): Bounds {
-  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+/* Frame bounds of a row set: the whole window, not the cells that happen to
+ * hold land. matplotlib — which frames the legacy plot — autoscales over the
+ * drawn points only, so all-water columns and rows drop out of the frame and
+ * the water_ntile knob rescales the picture as well as the ridges. Pinning
+ * the frame here keeps water, lakes and voids in their place, so a bbox
+ * covering a tile with no data shows that tile as flat water. Mirrors
+ * ridge_core::RidgeScene::from_grid. `empty` = nothing at all to draw. */
+export function frameBounds(rows: Row[]): Bounds {
+  let ymax = -Infinity;
   for (const row of rows) {
-    let hasData = false;
-    for (let c = 0; c < row.y.length; c++) {
-      const y = row.y[c];
-      if (Number.isFinite(y)) {
-        hasData = true;
-        if (y > ymax) ymax = y;
-        if (c < xmin) xmin = c;
-        if (c > xmax) xmax = c;
-      }
+    for (const y of row.y) {
+      // NaN comparisons are false, so gaps drop out of the max.
+      if (y > ymax) ymax = y;
     }
-    if (hasData && row.baseline < ymin) ymin = row.baseline;
   }
-  return { xmin, xmax, ymin, ymax, empty: xmin === Infinity };
+  const ncols = rows.length > 0 ? rows[0].y.length : 0;
+  // Baselines step down by LINE_SPACING, so the last row is the lowest.
+  const ymin = rows.length > 0 ? rows[rows.length - 1].baseline : 0;
+  return { xmin: 0, xmax: ncols - 1, ymin, ymax, empty: ymax === -Infinity };
 }
 
 /* Figure layout (matplotlib parity): figure size, subplot rect, and data
- * limits hugging the drawn content with 5% margins, re-measured after every
- * rotation so the landscape stays centered at a constant apparent size. */
+ * limits spanning the whole window with 5% margins, so masking never moves
+ * the frame. */
 export function buildLayout(bounds: Bounds, sizeScale: number, bboxRatio: number): Layout {
   const dx = (bounds.xmax - bounds.xmin) * AXES_MARGIN;
   const dy = (bounds.ymax - bounds.ymin) * AXES_MARGIN;

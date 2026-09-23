@@ -5,7 +5,7 @@
 import { evalCmap, parseColor, resolveLineColor, type LineColor, type Rgb } from "./colors.ts";
 import type { ElevationRequest, Params } from "./params.ts";
 import {
-  buildLayout, buildRows, contentBounds, preprocessGrid, rotatePlane, sampleWindow,
+  buildLayout, buildRows, frameBounds, preprocessGrid, rotatePlane, sampleWindow,
   type Layout, type Prepared, type Row,
 } from "./pipeline.ts";
 
@@ -97,7 +97,7 @@ export function buildScene(raw: Raw, prepared: Prepared, params: Params): Scene 
     grid = sampleWindow(rotated, raw.nrows, d.lat0, d.lon0, d.span, req.bbox, vrows, vcols);
   }
   const rows = buildRows(grid, vrows, vcols);
-  const bounds = contentBounds(rows);
+  const bounds = frameBounds(rows);
   if (bounds.empty) return null;
   const [lon0, lat0, lon1, lat1] = req.bbox;
   const bboxRatio = req.region === "disc" ? 1.0 : (lat1 - lat0) / (lon1 - lon0);

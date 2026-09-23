@@ -5,7 +5,7 @@
 // it at -33 degrees.
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { buildLayout, buildRows, contentBounds, preprocessGrid, rotatePlane } from "../src/lib/pipeline.ts";
+import { buildLayout, buildRows, frameBounds, preprocessGrid, rotatePlane } from "../src/lib/pipeline.ts";
 
 const FIXTURE = "/tmp/plane_fixture.json";
 
@@ -43,7 +43,7 @@ describe.runIf(existsSync(FIXTURE) || process.env.RIDGE_REQUIRE_FIXTURES)("JS pi
 
   test("layout matches", () => {
     const { fixture, rows } = run();
-    const layout = buildLayout(contentBounds(rows), 20, 24 / 30); // the fixture's size and bbox ratio
+    const layout = buildLayout(frameBounds(rows), 20, 24 / 30); // the fixture's size and bbox ratio
     for (const key of ["width_px", "height_px", "xlim", "ylim"] as const) {
       expect(layout[key]).toEqual(fixture.layout[key]);
     }
