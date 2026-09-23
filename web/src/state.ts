@@ -118,6 +118,15 @@ export function createRidgeState(initial: Params = DEFAULTS) {
         setRecenter((n) => n + 1);
       });
     },
+    /* Load an imported configuration: reset to the defaults, overlay it,
+     * resolve the span, fetch right away and re-center. */
+    applyConfig(config: Partial<Params>) {
+      fetchNow = true;
+      batch(() => {
+        setParams(reconcile(withSpan({ ...DEFAULTS, ...config, fit: "plane" })));
+        setRecenter((n) => n + 1);
+      });
+    },
     /* The permalink for the current parameters. */
     hash: () => paramsToHash(params),
   };

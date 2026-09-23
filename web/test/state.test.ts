@@ -94,6 +94,17 @@ describe("data changes refetch", () => {
     expect(state.recenter()).toBe(recenter + 1);
     expect(state.params.label).toBe(DEFAULTS.label); // everything else back to the defaults
   });
+
+  test("an imported config fetches, re-centers and resets the rest", async () => {
+    const recenter = state.recenter();
+    state.applyConfig({ num_lines: 60, label: "Imported" });
+    await settle();
+    expect(elevationRequests).toHaveLength(2);
+    expect(elevationRequests[1]).toMatchObject({ num_lines: 60 });
+    expect(state.recenter()).toBe(recenter + 1);
+    expect(state.params.label).toBe("Imported");
+    expect(state.params.viewpoint_angle).toBe(DEFAULTS.viewpoint_angle);
+  });
 });
 
 describe("map selection", () => {

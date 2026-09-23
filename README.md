@@ -115,7 +115,10 @@ water/lakes and rebuilds the ridge lines locally, throttled to animation
 frames. Only changing the location or resolution hits the network.
 
 **Export**: `SVG` downloads vector artwork straight from the backend;
-`PNG` rasterizes it at 2× resolution in the browser.
+`PNG` rasterizes it at 2× resolution in the browser. `config` opens a dialog
+that exports the whole view as JSON (one click to copy) and imports one (one
+click to paste from the clipboard, then apply). An imported config replaces the
+current one, resolves the region span and re-centers the map.
 
 **Map picker**: the bottom panel hosts an OpenStreetMap slippy map with two
 tools. **Move** (the default) drags to pan. **Select** drags to draw the

@@ -113,3 +113,42 @@ export function paramsFromHash(hash: string): Params {
 }
 
 export const paramsToHash = (params: Params) => "#" + encodeURIComponent(JSON.stringify(params));
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+const isBbox = (v: unknown): v is Bbox =>
+  Array.isArray(v) && v.length === 4 && v.every((n) => typeof n === "number" && Number.isFinite(n));
+
+/* The shareable configuration: the whole view as JSON (the same payload the
+ * permalink hash carries). */
+export function configToText(params: Params): string {
+  return JSON.stringify(params, null, 2);
+}
+
+/* Parse an exported configuration. Accepts the raw JSON, a bare `#hash`, or a
+ * full permalink URL, so pasting a shared link works too. Null when nothing
+ * usable is found or the bbox is malformed. */
+export function parseConfig(text: string): Partial<Params> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const hashAt = trimmed.indexOf("#");
+  const hash = hashAt >= 0 ? trimmed.slice(hashAt + 1) : trimmed;
+  const candidates = [hash, trimmed];
+  try {
+    candidates.push(decodeURIComponent(hash));
+  } catch { /* not percent-encoded */ }
+
+  for (const candidate of candidates) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed)) continue;
+    if ("bbox" in parsed && !isBbox(parsed.bbox)) continue;
+    return parsed as Partial<Params>;
+  }
+  return null;
+}

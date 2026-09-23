@@ -1,6 +1,7 @@
 import { createResource, For } from "solid-js";
 import { exportSvg, fetchPresets } from "../lib/api.ts";
 import { useRidge } from "../state.ts";
+import ConfigDialog from "./ConfigDialog.tsx";
 import ReadmeDialog from "./ReadmeDialog.tsx";
 
 function download(blob: Blob, name: string) {
@@ -34,6 +35,7 @@ export default function Header() {
   const { params, scene, applyPreset } = useRidge();
   const [presets] = createResource(fetchPresets, { initialValue: [] });
   let readme!: { open: () => void };
+  let config!: { open: () => void };
 
   async function saveSvg() {
     try {
@@ -70,9 +72,11 @@ export default function Header() {
         </select>
         <button id="export-svg" title="Download vector SVG" onClick={saveSvg}>SVG</button>
         <button id="export-png" title="Rasterize to PNG" onClick={savePng}>PNG</button>
+        <button id="config-open" title="Export or import this view's configuration" onClick={() => config.open()}>config</button>
         <button id="readme-open" title="Show the README" onClick={() => readme.open()}>README</button>
       </div>
       <ReadmeDialog ref={(api) => (readme = api)} />
+      <ConfigDialog ref={(api) => (config = api)} />
     </header>
   );
 }
