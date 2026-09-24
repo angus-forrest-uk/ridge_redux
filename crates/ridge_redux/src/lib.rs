@@ -146,8 +146,16 @@ pub async fn run() {
     if prefetch {
         api::prefetch_default_scene(&state).await;
     }
-    let url = format!("http://{}", listener.local_addr().expect("bound address"));
-    println!("ridge_redux running at {url}");
+    let local = listener.local_addr().expect("bound address");
+    let url = browse_url(local);
+    // A wildcard bind (a container, a LAN server) has no browsable address
+    // of its own: browsers reach the server through the host's published
+    // port, so announce loopback and say what is actually listening.
+    if local.ip().is_unspecified() {
+        println!("ridge_redux running at {url} (listening on {local})");
+    } else {
+        println!("ridge_redux running at {url}");
+    }
     if config.open_browser {
         if let Err(e) = open::that_detached(&url) {
             tracing::warn!("couldn't open a browser ({e}); open {url} yourself");
@@ -238,6 +246,17 @@ async fn bind_preferring(preferred: SocketAddr) -> std::io::Result<tokio::net::T
     }
 }
 
+/// The URL a browser can actually open for a bound listener. A wildcard
+/// bind (a container, a LAN server) has no address to open directly: the
+/// user goes through the host's published port, which is loopback here.
+fn browse_url(local: SocketAddr) -> String {
+    if local.ip().is_unspecified() {
+        format!("http://127.0.0.1:{}", local.port())
+    } else {
+        format!("http://{local}")
+    }
+}
+
 /// Build the full app router (separated for integration tests).
 pub fn build_router(state: state::AppState, config: &ServerConfig) -> Router {
     let api = Router::new()
@@ -285,5 +304,17 @@ mod tests {
         drop(probe);
         let listener = bind_preferring(free).await.unwrap();
         assert_eq!(listener.local_addr().unwrap(), free);
+    }
+
+    #[test]
+    fn wildcard_binds_announce_loopback() {
+        let v4: SocketAddr = "0.0.0.0:8420".parse().unwrap();
+        assert_eq!(browse_url(v4), "http://127.0.0.1:8420");
+        let v6: SocketAddr = "[::]:8420".parse().unwrap();
+        assert_eq!(browse_url(v6), "http://127.0.0.1:8420");
+        let loopback: SocketAddr = "127.0.0.1:8420".parse().unwrap();
+        assert_eq!(browse_url(loopback), "http://127.0.0.1:8420");
+        let lan: SocketAddr = "192.168.1.10:8420".parse().unwrap();
+        assert_eq!(browse_url(lan), "http://192.168.1.10:8420");
     }
 }
