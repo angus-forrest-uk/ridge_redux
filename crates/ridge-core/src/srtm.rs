@@ -150,6 +150,25 @@ pub fn surrounding_tile_origins(lat0: f64, lat1: f64, lon0: f64, lon1: f64) -> V
 /// Where tiles come from.
 pub trait TileSource: Send + Sync {
     fn tile(&self, lat_lo: i32, lon_lo: i32) -> Option<Arc<Tile>>;
+    /// Origins of the tiles available locally (in memory or on disk), for
+    /// showing coverage on the map. Empty for sources that synthesize.
+    fn loaded_tiles(&self) -> Vec<(i32, i32)> {
+        Vec::new()
+    }
+}
+
+/// The `(lat_lo, lon_lo)` origins of the `.hgt` files in `dir`, sorted for
+/// stable output.
+fn scan_hgt_dir(dir: &Path) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let name = entry.file_name();
+        if let Some(origin) = name.to_str().and_then(parse_tile_name) {
+            out.push((origin.0 as i32, origin.1 as i32));
+        }
+    }
+    out.sort_unstable();
+    out
 }
 
 /// Tiles read from a local directory (tests, offline demos, pre-seeded caches).
@@ -183,6 +202,10 @@ impl TileSource for DirSource {
             .unwrap()
             .insert((lat_lo, lon_lo), loaded.clone());
         loaded
+    }
+
+    fn loaded_tiles(&self) -> Vec<(i32, i32)> {
+        scan_hgt_dir(&self.dir)
     }
 }
 
@@ -377,6 +400,12 @@ impl TileSource for RemoteSource {
             .unwrap()
             .insert((lat_lo, lon_lo), loaded.clone());
         loaded
+    }
+
+    fn loaded_tiles(&self) -> Vec<(i32, i32)> {
+        // The disk cache is the truth: every downloaded tile lands there,
+        // including ones fetched in earlier sessions.
+        scan_hgt_dir(&self.cache_dir)
     }
 }
 
@@ -632,6 +661,19 @@ mod tests {
         assert!(got.contains(&(59, 179)) && !got.iter().any(|&(la, _)| la > 59));
         // An absurd bbox preloads nothing.
         assert!(surrounding_tile_origins(-60.0, 60.0, -180.0, 180.0).is_empty());
+    }
+
+    #[test]
+    fn dir_source_lists_loaded_tiles() {
+        let root = std::env::temp_dir().join(format!("ridge-loaded-{}", std::process::id()));
+        let dir = root.join("srtm");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("N44W072.hgt"), [0u8; 10]).unwrap();
+        std::fs::write(dir.join("S33E151.hgt"), [0u8; 10]).unwrap();
+        std::fs::write(dir.join("junk.txt"), b"not a tile").unwrap();
+        let src = DirSource::new(&dir);
+        assert_eq!(src.loaded_tiles(), vec![(-33, 151), (44, -72)]);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

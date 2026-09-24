@@ -939,6 +939,16 @@ pub async fn presets() -> Json<serde_json::Value> {
     Json(presets)
 }
 
+/// `GET /api/tiles` — origins of the tiles available locally, for the
+/// map's coverage shading.
+pub async fn tiles(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let source = Arc::clone(&state.source);
+    let tiles = tokio::task::spawn_blocking(move || source.loaded_tiles())
+        .await
+        .unwrap_or_default();
+    Json(serde_json::json!({ "tiles": tiles }))
+}
+
 /// The project README, compiled in so the app can show it without the repo.
 const README: &str = include_str!(env!("RIDGE_README"));
 

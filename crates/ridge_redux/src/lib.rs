@@ -263,6 +263,7 @@ pub fn build_router(state: state::AppState, config: &ServerConfig) -> Router {
         .route("/healthz", get(api::healthz))
         .route("/api/presets", get(api::presets))
         .route("/api/readme", get(api::readme))
+        .route("/api/tiles", get(api::tiles))
         .route("/api/preview", post(api::preview))
         .route("/api/elevation", post(api::elevation))
         .route("/api/export.svg", post(api::export_svg));
