@@ -73,7 +73,9 @@ or Node needed to run it. Install Docker the usual way on your platform:
 sudo apt install docker.io docker-compose-v2
 # Arch
 sudo pacman -S docker docker-compose && sudo systemctl enable --now docker
-# macOS (Docker Desktop, native on Apple Silicon and Intel)
+# macOS (OrbStack recommended, or Docker Desktop; both native on Apple Silicon and Intel)
+brew install --cask orbstack
+# for Docker Desktop instead:
 brew install --cask docker
 ```
 
