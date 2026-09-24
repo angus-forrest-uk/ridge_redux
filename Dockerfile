@@ -1,6 +1,12 @@
 # Multi-stage build: frontend, then a static musl binary, then a small runtime.
 # The binary embeds the frontend (build.rs -> rust-embed), so the final image
 # is just the one executable: `docker run` needs nothing beside it.
+#
+# Layer order is the point: the stub build (which compiles the whole
+# dependency tree) must only depend on the manifests, so docs and frontend
+# edits don't throw the cache away. build.rs needs a README to exist and
+# wants web/dist, so placeholders go in before it runs and the real files
+# land just before the final build.
 
 FROM node:22-alpine AS web
 WORKDIR /src
@@ -17,21 +23,23 @@ WORKDIR /src
 # Manifests first, with stub sources, so the dependency layers cache across
 # releases: only the workspace crates recompile when the source changes.
 COPY Cargo.toml Cargo.lock ./
-COPY crates/ridge-core/Cargo.toml crates/ridge-core/README.md crates/ridge-core/
+COPY crates/ridge-core/Cargo.toml crates/ridge-core/
 COPY crates/ridge_redux/Cargo.toml crates/ridge_redux/build.rs crates/ridge_redux/
-# Both READMEs are compiled in: ridge-core's is its rustdoc preface,
-# the workspace one is served at /api/readme.
-COPY README.md .
-COPY --from=web /src/dist web/dist
 RUN mkdir -p crates/ridge-core/src/bin crates/ridge_redux/src \
     && echo "" > crates/ridge-core/src/lib.rs \
     && echo "fn main() {}" > crates/ridge-core/src/bin/render.rs \
     && echo "" > crates/ridge_redux/src/lib.rs \
     && echo "fn main() {}" > crates/ridge_redux/src/main.rs \
+    && echo "placeholder" > README.md \
     && cargo build --release --locked -p ridge_redux
 
+# Everything the real build embeds, after the expensive layers. build.rs
+# re-runs here and picks up the real frontend and READMEs.
+COPY --from=web /src/dist web/dist
 COPY crates/ridge-core/src crates/ridge-core/src
+COPY crates/ridge-core/README.md crates/ridge-core/README.md
 COPY crates/ridge_redux/src crates/ridge_redux/src
+COPY README.md .
 # COPY preserves the checkout's file mtimes, which predate the stub build
 # above — cargo would then call the crates fresh and link their stub
 # rlibs. Touch the sources to force the real rebuild.
