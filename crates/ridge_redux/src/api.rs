@@ -786,6 +786,7 @@ async fn load_elevation(
     state: &AppState,
     params: &ElevationParams,
 ) -> Result<Arc<ndarray::Array2<f64>>, ApiError> {
+    spawn_surrounding_preload(state, &params.bbox_struct());
     let key = params.cache_key();
     if let Some(grid) = state.grid_cache.get(key) {
         return Ok(grid);
@@ -814,6 +815,36 @@ async fn load_elevation(
     let grid = Arc::new(grid);
     state.grid_cache.insert(key, grid.clone());
     Ok(grid)
+}
+
+/// Warm the tile cache around `bbox` (its tiles plus one surrounding
+/// ring), so moving or reshaping the selection samples tiles that are
+/// already local. Fire-and-forget: a failure only costs a fetch later,
+/// and absent tiles (open ocean) are memoized as absent.
+fn spawn_surrounding_preload(state: &AppState, bbox: &Bbox) {
+    let origins =
+        ridge_core::srtm::surrounding_tile_origins(bbox.lat0, bbox.lat1, bbox.lon0, bbox.lon1);
+    if origins.is_empty() {
+        return;
+    }
+    let source = Arc::clone(&state.source);
+    tokio::spawn(async move {
+        let started = std::time::Instant::now();
+        let loaded = tokio::task::spawn_blocking(move || {
+            origins
+                .iter()
+                .filter(|&(lat_lo, lon_lo)| source.tile(*lat_lo, *lon_lo).is_some())
+                .count()
+        })
+        .await;
+        match loaded {
+            Ok(n) if n > 0 => {
+                tracing::debug!("{n} surrounding tiles ready in {:.1?}", started.elapsed())
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!("tile preload failed: {e}"),
+        }
+    });
 }
 
 /// The `/api/elevation` request the frontend makes on a fresh load (the

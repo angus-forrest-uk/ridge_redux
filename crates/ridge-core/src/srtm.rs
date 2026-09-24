@@ -125,6 +125,28 @@ pub fn tile_name(lat: f64, lon: f64) -> String {
     )
 }
 
+/// The tile origins (1° squares, as `(lat_lo, lon_lo)`) covering `bbox`
+/// plus one ring of surrounding tiles — the neighborhood a moved or
+/// reshaped bbox would sample next. Clamped to SRTM coverage (±60°,
+/// ±180°); an absurdly large bbox preloads nothing. Absent tiles (open
+/// ocean) cost one mirror-index lookup and are memoized as absent.
+pub fn surrounding_tile_origins(lat0: f64, lat1: f64, lon0: f64, lon1: f64) -> Vec<(i32, i32)> {
+    let lat_lo = (lat0.floor() as i32 - 1).max(-60);
+    let lat_hi = (lat1.ceil() as i32 + 1).min(60); // exclusive
+    let lon_lo = (lon0.floor() as i32 - 1).max(-180);
+    let lon_hi = (lon1.ceil() as i32 + 1).min(180); // exclusive
+    if (lat_hi - lat_lo) * (lon_hi - lon_lo) > 400 {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity(((lat_hi - lat_lo) * (lon_hi - lon_lo)) as usize);
+    for lat in lat_lo..lat_hi {
+        for lon in lon_lo..lon_hi {
+            out.push((lat, lon));
+        }
+    }
+    out
+}
+
 /// Where tiles come from.
 pub trait TileSource: Send + Sync {
     fn tile(&self, lat_lo: i32, lon_lo: i32) -> Option<Arc<Tile>>;
@@ -592,6 +614,24 @@ mod tests {
         assert_eq!(parse_tile_name("N44W072.hgt"), Some((44.0, -72.0)));
         assert_eq!(parse_tile_name("S33E151.hgt"), Some((-33.0, 151.0)));
         assert_eq!(parse_tile_name("junk.hgt"), None);
+    }
+
+    #[test]
+    fn surrounding_origins_ring_and_clamps() {
+        // A bbox inside one tile: its tile plus the ring around it.
+        let mut got = surrounding_tile_origins(44.3, 44.6, -71.9, -71.6);
+        got.sort();
+        assert_eq!(got.len(), 9);
+        assert!(got.contains(&(44, -72)));
+        assert!(got.contains(&(43, -73)) && got.contains(&(45, -71)));
+        // A bbox spanning two tiles: their tiles plus the ring.
+        assert_eq!(surrounding_tile_origins(44.2, 45.4, -71.9, -71.6).len(), 12);
+        // Grown past the coverage edges: clamped into the SRTM range.
+        let got = surrounding_tile_origins(59.5, 59.9, 179.5, 179.9);
+        assert_eq!(got.len(), 4);
+        assert!(got.contains(&(59, 179)) && !got.iter().any(|&(la, _)| la > 59));
+        // An absurd bbox preloads nothing.
+        assert!(surrounding_tile_origins(-60.0, 60.0, -180.0, 180.0).is_empty());
     }
 
     #[test]
