@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.4.0...ridge_redux-v0.4.1) - 2026-09-24
+
+### Added
+
+- publish a docker image to ghcr.io
+
 ## [0.4.0](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.3.2...ridge_redux-v0.4.0) - 2026-09-23
 
 ### Added
