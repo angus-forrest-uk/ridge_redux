@@ -32,7 +32,11 @@ RUN mkdir -p crates/ridge-core/src/bin crates/ridge_redux/src \
 
 COPY crates/ridge-core/src crates/ridge-core/src
 COPY crates/ridge_redux/src crates/ridge_redux/src
-RUN cargo build --release --locked -p ridge_redux
+# COPY preserves the checkout's file mtimes, which predate the stub build
+# above — cargo would then call the crates fresh and link their stub
+# rlibs. Touch the sources to force the real rebuild.
+RUN find crates -name '*.rs' -exec touch {} + \
+    && cargo build --release --locked -p ridge_redux
 
 FROM alpine:3.22
 # TLS roots (belt and braces: ureq bundles webpki-roots) and a cache home.
