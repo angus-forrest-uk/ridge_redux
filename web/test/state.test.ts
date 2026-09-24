@@ -12,6 +12,10 @@ const GRID = Array.from({ length: 10 }, (_, r) =>
     r === 1 && c >= 6 ? null : r === 5 && c >= 3 && c <= 5 ? 500 : 100 + 20 * r + 3 * c));
 
 const elevationRequests: Record<string, unknown>[] = [];
+const LOCAL_TILES: [number, number][] = [
+  [44, -72],
+  [43, -71],
+];
 const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let state: RidgeState;
@@ -20,6 +24,7 @@ let dispose: () => void;
 beforeEach(async () => {
   elevationRequests.length = 0;
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+    if (url === "/api/tiles") return new Response(JSON.stringify({ tiles: LOCAL_TILES }));
     if (url !== "/api/elevation") throw new Error(`unexpected fetch ${url}`);
     elevationRequests.push(JSON.parse(String(init?.body)));
     return new Response(JSON.stringify({ shape: [10, 10], values: GRID }));
@@ -41,6 +46,10 @@ describe("loading", () => {
     expect(elevationRequests).toHaveLength(1);
     expect(state.scene()?.rows.length).toBeGreaterThan(0);
     expect(state.status().text).toContain("80 × 300");
+  });
+
+  test("the loaded tiles come back for the map shading", () => {
+    expect(state.tiles()).toEqual(LOCAL_TILES);
   });
 
   test("the request carries no angle: rotation is local", () => {

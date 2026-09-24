@@ -4,7 +4,7 @@
  * memos, so the angle, water, relief and style knobs redraw locally. */
 import { batch, createContext, createEffect, createMemo, createSignal, on, onCleanup, useContext } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { fetchElevation, type Preset } from "./lib/api.ts";
+import { fetchElevation, fetchTiles, type Preset } from "./lib/api.ts";
 import { DEFAULTS, diagonal, paramsToHash, type ElevationRequest, type Params } from "./lib/params.ts";
 import type { Bbox } from "./lib/pipeline.ts";
 import { buildScene, prepare, type Raw } from "./lib/scene.ts";
@@ -28,6 +28,17 @@ export function createRidgeState(initial: Params = DEFAULTS) {
   const [status, setStatus] = createSignal<Status>({ text: "ready", busy: false });
   // Bumped when the map should re-center on the bbox (on load, on a preset).
   const [recenter, setRecenter] = createSignal(0);
+  // The tiles the server has locally (in memory or on disk), for the map's
+  // green coverage shading. Refreshed after each elevation fetch: the
+  // prefetch grows the set as you move.
+  const [tiles, setTiles] = createSignal<[number, number][]>([]);
+  async function refreshTiles() {
+    try {
+      setTiles(await fetchTiles());
+    } catch {
+      /* shading is best-effort */
+    }
+  }
 
   const request = createMemo(
     (): ElevationRequest => ({
@@ -70,6 +81,7 @@ export function createRidgeState(initial: Params = DEFAULTS) {
       const data = await fetchElevation(req);
       if (mine !== seq) return; // a newer request is in flight
       setRaw(data);
+      void refreshTiles();
       const ms = Math.round(performance.now() - t0);
       setStatus(scene()
         ? { text: `${req.num_lines} × ${req.elevation_pts} window · ${ms} ms · angle is local`, busy: false }
@@ -101,6 +113,7 @@ export function createRidgeState(initial: Params = DEFAULTS) {
     scene,
     status,
     recenter,
+    tiles,
     /* Set one parameter. */
     set<K extends keyof Params>(key: K, value: Params[K]) {
       setParams(key, value as never);

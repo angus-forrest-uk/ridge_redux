@@ -36,6 +36,14 @@ export async function fetchPresets(): Promise<Preset[]> {
   return resp.ok ? resp.json() : [];
 }
 
+/** Origins of the tiles available locally, for the map's coverage shading. */
+export async function fetchTiles(): Promise<[number, number][]> {
+  const resp = await fetch("/api/tiles");
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data: { tiles: [number, number][] } = await resp.json();
+  return data.tiles;
+}
+
 export async function fetchReadme(): Promise<string> {
   const resp = await fetch("/api/readme");
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

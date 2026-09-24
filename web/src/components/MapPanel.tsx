@@ -16,7 +16,7 @@ const toBounds = ([lon0, lat0, lon1, lat1]: Bbox): L.LatLngBoundsExpression => [
 /* The location map: pan it with the move tool, drag out the area to render
  * with the select tool, and drag the selection to move it as-is. */
 export default function MapPanel() {
-  const { params, setBbox, recenter } = useRidge();
+  const { params, setBbox, recenter, tiles } = useRidge();
   const [tool, setTool] = createSignal<MapTool>("move");
   const [open, setOpen] = createSignal(true);
   const [drawStart, setDrawStart] = createSignal<LatLng>();
@@ -41,12 +41,52 @@ export default function MapPanel() {
     const fitWorldWidth = () => map.setMinZoom(Math.max(0, Math.ceil(Math.log2(map.getSize().x / 256))));
     map.on("resize", fitWorldWidth);
 
-    // SRTM covers only 60S..60N; shade the rest.
+    // SRTM covers only 60S..60N; shade the rest. The outer corner sits at
+    // the projection's own limit: 90° has no Mercator coordinates, and a
+    // polygon corner there silently fails to render.
+    const MERCATOR_MAX_LAT = 85.0511;
     const excluded = { className: "excluded-zone", interactive: false, stroke: false };
-    L.polygon([[SRTM_LAT_MAX, -180], [SRTM_LAT_MAX, 180], [90, 180], [90, -180]], excluded)
-      .addTo(map).bindTooltip("no SRTM data above 60°N");
-    L.polygon([[-SRTM_LAT_MAX, -180], [-SRTM_LAT_MAX, 180], [-90, 180], [-90, -180]], excluded)
-      .addTo(map).bindTooltip("no SRTM data below 60°S");
+    const edge = { className: "excluded-edge", interactive: false };
+    for (const sign of [1, -1]) {
+      L.polygon(
+        [
+          [SRTM_LAT_MAX * sign, -180],
+          [SRTM_LAT_MAX * sign, 180],
+          [MERCATOR_MAX_LAT * sign, 180],
+          [MERCATOR_MAX_LAT * sign, -180],
+        ],
+        excluded,
+      )
+        .addTo(map)
+        .bindTooltip(`no SRTM data ${sign > 0 ? "above 60°N" : "below 60°S"}`, {
+          permanent: true,
+          direction: "center",
+          className: "zone-label",
+        });
+      L.polyline(
+        [
+          [SRTM_LAT_MAX * sign, -180],
+          [SRTM_LAT_MAX * sign, 180],
+        ],
+        edge,
+      ).addTo(map);
+    }
+
+    // Green shading for the tiles the server has locally; refreshed after
+    // each fetch, so the ring around the selection lights up as it moves.
+    const tileShade = L.layerGroup().addTo(map);
+    createEffect(() => {
+      tileShade.clearLayers();
+      for (const [latLo, lonLo] of tiles()) {
+        L.rectangle(
+          [
+            [latLo, lonLo],
+            [latLo + 1, lonLo + 1],
+          ],
+          { className: "loaded-tile", interactive: false },
+        ).addTo(tileShade);
+      }
+    });
 
     const rect = L.rectangle(toBounds(params.bbox), { className: "bbox-rect", interactive: false }).addTo(map);
 
@@ -156,7 +196,7 @@ export default function MapPanel() {
             select
           </button>
         </div>
-        <div id="map-hint">gray = beyond SRTM coverage (±60° latitude) · tiles © OpenStreetMap</div>
+        <div id="map-hint">gray = beyond SRTM coverage (±60°) · green = tiles on disk · map data © OpenStreetMap</div>
       </div>
     </section>
   );

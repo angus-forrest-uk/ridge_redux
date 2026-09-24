@@ -161,9 +161,10 @@ bounding box, and holding Shift draws one without leaving Move. Dragging
 the center changes — which makes nudging a view around cheap: the
 surrounding tiles are already prefetched, so the refetch is sampling only.
 (The same drag rule is what a later reshape — dragging a single edge — will
-build on.) The box syncs
-both ways with the coordinate inputs and presets. Areas beyond SRTM coverage (|φ| > 60°) are shaded out and
-drawn selections are clamped to the covered band.
+build on.) The box syncs both ways with the coordinate inputs and presets.
+Tiles the server has locally are shaded green, and everything beyond SRTM
+coverage (|φ| > 60°) is shaded out with a dashed boundary; drawn selections
+are clamped to the covered band.
 
 **Rotation model** (all client-side, one elevation fetch): the backend ships
 a rotation-invariant **disc** of samples: a square region around your bbox
@@ -212,7 +213,7 @@ water percentile, annotations, …).
 │ ├─ srtm: .hgt fetch/parse/cache  ├─ POST /api/elevation → raw grid │
 │ │   (SRTM1 → SRTM3 fallback,     ├─ POST /api/preview  → JSON      │
 │ │    zip support, disk cache)    ├─ POST /api/export.svg → SVG     │
-│ ├─ grid sampling (=srtm.py)      ├─ GET  /api/presets, /healthz    │
+│ ├─ grid sampling (=srtm.py)      ├─ GET  /api/tiles, /presets      │
 │ │   rect + rotation-invariant                                      │
 │ │   disc regions                                                   │
 │ ├─ rotate (=scipy order 0/1)     ├─ static frontend + gzip         │
@@ -276,6 +277,8 @@ fill under each line, the same occlusion trick as upstream `fill_between`.
 
 `POST /api/export.svg` takes the identical body and returns standalone SVG.
 `GET /api/presets` lists 10 curated locations (same as the upstream README).
+`GET /api/tiles` lists the tile origins available locally — the map shades
+them green, so the prefetched neighborhood is visible before you move.
 
 ## Fidelity to upstream
 
