@@ -270,6 +270,7 @@ async fn prefetch_makes_first_load_a_cache_hit() {
         "elevation_pts": 300,
         "region": "rect",
         "span_deg": 1.201,
+        "move_margin": 0.6005,
     })
     .to_string();
     let (status, _) = post(app, "/api/elevation", body).await;
@@ -279,6 +280,34 @@ async fn prefetch_makes_first_load_a_cache_hit() {
         (1, 1),
         "the prefetch misses once, the first load hits"
     );
+}
+
+#[tokio::test]
+async fn move_margin_grows_the_disc_but_not_the_window() {
+    let app = app_with_fresh_state();
+    let base = json!({
+        "bbox": [-71.928864, 43.758201, -70.957947, 44.465151],
+        "num_lines": 80,
+        "elevation_pts": 300,
+        "region": "rect",
+        "span_deg": 1.201,
+    });
+    let (status, resp) = post(app.clone(), "/api/elevation", base.to_string()).await;
+    assert_eq!(status, StatusCode::OK);
+    let plain: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
+
+    let mut margined = base.clone();
+    margined["move_margin"] = json!(0.6005);
+    let (status, resp) = post(app, "/api/elevation", margined.to_string()).await;
+    assert_eq!(status, StatusCode::OK);
+    let sized: serde_json::Value = serde_json::from_slice(&body_bytes(resp).await).unwrap();
+
+    // The disc grows to cover the move range, but the display window stays
+    // the centered 80 x 300 crop (its offset just centers in a bigger grid).
+    assert!(sized["shape"][0].as_u64().unwrap() > plain["shape"][0].as_u64().unwrap());
+    assert_eq!(sized["window"]["rows"], plain["window"]["rows"]);
+    assert_eq!(sized["window"]["cols"], plain["window"]["cols"]);
+    assert!(sized["window"]["row0"].as_u64().unwrap() > plain["window"]["row0"].as_u64().unwrap());
 }
 
 #[tokio::test]

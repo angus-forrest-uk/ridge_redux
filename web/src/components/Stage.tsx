@@ -1,18 +1,43 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { LINE_SPACING, type Layout } from "../lib/pipeline.ts";
+import { movedBbox } from "../lib/params.ts";
 import { drawScene, fitView, type View } from "../lib/draw.ts";
+import type { Bbox } from "../lib/pipeline.ts";
 import { useRidge } from "../state.ts";
 
 const ZOOM_STEP = 1.15;
 
-/* The artwork canvas. Drag pans, the wheel zooms about the cursor, and a
- * double-click fits the figure again. */
+type CanvasTool = "pan" | "move";
+
+/* Canvas drag in move mode: the pointer delta (canvas px) translated into
+ * bbox degrees, along the axes the figure is drawn in. */
+function moveDelta(
+  paramsBbox: Bbox, numLines: number, elevationPts: number,
+  layout: Layout, scale: number, dxPx: number, dyPx: number,
+): { dLat: number; dLng: number } {
+  const [w, s, e, n] = paramsBbox;
+  const cellPerPxX = (layout.xlim[1] - layout.xlim[0]) / (layout.axes[2] - layout.axes[0]) / scale;
+  const displayPerPxY = (layout.ylim[1] - layout.ylim[0]) / (layout.axes[3] - layout.axes[1]) / scale;
+  const dLng = dxPx * cellPerPxX * ((e - w) / Math.max(1, elevationPts - 1));
+  // Rows are spaced LINE_SPACING display units apart and run northward,
+  // while canvas y runs down: the sign flips.
+  const dLat = -(dyPx * displayPerPxY / LINE_SPACING) * ((n - s) / Math.max(1, numLines));
+  return { dLat, dLng };
+}
+
+/* The artwork canvas. Drag pans or moves the area (toggle), the wheel
+ * zooms about the cursor, and a double-click fits the figure again. */
 export default function Stage() {
-  const { raw, scene, status } = useRidge();
+  const { raw, scene, status, params, setBbox, suspendFetch, resumeFetch } = useRidge();
   let canvas!: HTMLCanvasElement;
   const [size, setSize] = createSignal({ width: 0, height: 0 });
+  const [tool, setTool] = createSignal<CanvasTool>("pan");
   // Unset until the user pans or zooms: the figure then stays fitted.
   const [panned, setPanned] = createSignal<View>();
-  const [dragging, setDragging] = createSignal<{ x: number; y: number; view: View }>();
+  const [panDrag, setPanDrag] = createSignal<{ x: number; y: number; view: View }>();
+  // A move drag: the pointer start and the bbox it started from. The bbox
+  // commits as it goes (the state layer suspends fetches until release).
+  const [moveDrag, setMoveDrag] = createSignal<{ x: number; y: number; bbox: Bbox }>();
   // Bumped when web fonts finish loading: the label is drawn in one (Cinzel),
   // and a canvas doesn't redraw by itself when it arrives.
   const [fontsLoaded, setFontsLoaded] = createSignal(0);
@@ -52,7 +77,7 @@ export default function Stage() {
   });
 
   // Pointer position in canvas pixels.
-  const at = (e: MouseEvent) => {
+  const at = (e: PointerEvent | MouseEvent) => {
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     return { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr };
@@ -63,20 +88,50 @@ export default function Stage() {
       <canvas
         id="canvas"
         ref={canvas}
-        classList={{ dragging: !!dragging() }}
+        classList={{
+          dragging: !!panDrag(),
+          "move-mode": tool() === "move",
+          "move-dragging": !!moveDrag(),
+        }}
         onPointerDown={(e) => {
-          const v = view();
-          if (!v) return;
-          setDragging({ ...at(e), view: v });
+          const p = at(e);
+          if (tool() === "move") {
+            if (!scene()) return;
+            setMoveDrag({ x: p.x, y: p.y, bbox: [...params.bbox] as Bbox });
+            suspendFetch();
+          } else {
+            const v = view();
+            if (!v) return;
+            setPanDrag({ ...p, view: v });
+          }
           canvas.setPointerCapture(e.pointerId);
         }}
         onPointerMove={(e) => {
-          const d = dragging();
+          const md = moveDrag();
+          if (md) {
+            const s = scene(), v = view();
+            if (s && v) {
+              const p = at(e);
+              const { dLat, dLng } = moveDelta(
+                md.bbox, params.num_lines, params.elevation_pts,
+                s.layout, v.scale, p.x - md.x, p.y - md.y,
+              );
+              // Commits as it goes: the state layer suspends the fetch,
+              // so this redraws from the cached disc at frame rate.
+              setBbox(movedBbox(md.bbox, dLat, dLng));
+            }
+            return;
+          }
+          const d = panDrag();
           if (!d) return;
           const p = at(e);
           setPanned({ ...d.view, tx: d.view.tx + p.x - d.x, ty: d.view.ty + p.y - d.y });
         }}
-        onPointerUp={() => setDragging(undefined)}
+        onPointerUp={() => {
+          if (moveDrag()) resumeFetch();
+          setMoveDrag(undefined);
+          setPanDrag(undefined);
+        }}
         onWheel={(e) => {
           e.preventDefault();
           const v = view();
@@ -91,8 +146,32 @@ export default function Stage() {
         }}
         onDblClick={() => setPanned(undefined)}
       />
+      <div id="stage-tools" role="group" aria-label="canvas tool">
+        <button
+          id="stage-tool-pan"
+          classList={{ active: tool() === "pan" }}
+          aria-pressed={tool() === "pan"}
+          title="Pan: drag to slide the view"
+          onClick={() => setTool("pan")}
+        >
+          pan
+        </button>
+        <button
+          id="stage-tool-move"
+          classList={{ active: tool() === "move" }}
+          aria-pressed={tool() === "move"}
+          title="Move: drag to move the area — the selection follows, on the map too"
+          onClick={() => setTool("move")}
+        >
+          move
+        </button>
+      </div>
       <div id="status" classList={{ busy: status().busy }}>{status().text}</div>
-      <div id="hint">drag to pan · wheel to zoom · double-click to reset</div>
+      <div id="hint">
+        {tool() === "move"
+          ? "drag to move the area · wheel to zoom · double-click to reset"
+          : "drag to pan · wheel to zoom · double-click to reset"}
+      </div>
     </div>
   );
 }

@@ -5,7 +5,7 @@
 import { batch, createContext, createEffect, createMemo, createSignal, on, onCleanup, useContext } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { fetchElevation, fetchTiles, type Preset } from "./lib/api.ts";
-import { DEFAULTS, diagonal, paramsToHash, type ElevationRequest, type Params } from "./lib/params.ts";
+import { DEFAULTS, diagonal, moveMargin, paramsToHash, type ElevationRequest, type Params } from "./lib/params.ts";
 import type { Bbox } from "./lib/pipeline.ts";
 import { buildScene, prepare, type Raw } from "./lib/scene.ts";
 
@@ -47,6 +47,7 @@ export function createRidgeState(initial: Params = DEFAULTS) {
       elevation_pts: params.elevation_pts,
       region: params.region,
       span_deg: params.span_deg,
+      move_margin: params.region === "rect" ? moveMargin(params.bbox) : 0,
     }),
     undefined,
     { equals: sameRequest },
@@ -69,8 +70,12 @@ export function createRidgeState(initial: Params = DEFAULTS) {
   });
 
   // Fetch the grid when the request changes: immediately on load and for a
-  // preset, debounced while a slider or input is being moved.
+  // preset, debounced while a slider or input is being moved, and suspended
+  // entirely while a canvas move-drag recomputes the scene from the cached
+  // disc (resumeFetch() then fetches the final position right away).
   let fetchNow = true;
+  let suspended = false;
+  let pendingWhileSuspended = false;
   let seq = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   async function load(req: ElevationRequest) {
@@ -92,6 +97,10 @@ export function createRidgeState(initial: Params = DEFAULTS) {
   }
   createEffect(on(request, (req) => {
     clearTimeout(timer);
+    if (suspended) {
+      pendingWhileSuspended = true;
+      return;
+    }
     if (fetchNow) {
       fetchNow = false;
       load(req);
@@ -114,6 +123,20 @@ export function createRidgeState(initial: Params = DEFAULTS) {
     status,
     recenter,
     tiles,
+    /* Silence fetches while a move-drag re-windows the cached disc; the
+     * drag ends with resumeFetch(), which loads the final position at
+     * once. */
+    suspendFetch() {
+      suspended = true;
+    },
+    resumeFetch() {
+      suspended = false;
+      if (pendingWhileSuspended) {
+        pendingWhileSuspended = false;
+        clearTimeout(timer);
+        load(request());
+      }
+    },
     /* Set one parameter. */
     set<K extends keyof Params>(key: K, value: Params[K]) {
       setParams(key, value as never);

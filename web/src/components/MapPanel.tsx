@@ -16,7 +16,7 @@ const toBounds = ([lon0, lat0, lon1, lat1]: Bbox): L.LatLngBoundsExpression => [
 /* The location map: pan it with the move tool, drag out the area to render
  * with the select tool, and drag the selection to move it as-is. */
 export default function MapPanel() {
-  const { params, setBbox, recenter, tiles } = useRidge();
+  const { params, setBbox, recenter, tiles, suspendFetch, resumeFetch } = useRidge();
   const [tool, setTool] = createSignal<MapTool>("move");
   const [open, setOpen] = createSignal(true);
   const [drawStart, setDrawStart] = createSignal<LatLng>();
@@ -126,6 +126,7 @@ export default function MapPanel() {
       // A drag inside the selection moves it as-is; Shift still draws.
       if (!e.originalEvent.shiftKey && insideSelection(lat, lng)) {
         setMoveStart({ at: { lat, lng }, bbox: [...params.bbox] as Bbox });
+        suspendFetch();
         return;
       }
       if (!startsSelection(tool(), e.originalEvent.shiftKey)) return;
@@ -137,8 +138,8 @@ export default function MapPanel() {
       const lat = clampLat(e.latlng.lat), lng = clampLng(e.latlng.lng);
       const move = moveStart();
       if (move) {
-        // Commit as it goes: the store debounces the refetch, so the
-        // scene follows a pause in the drag without waiting for mouseup.
+        // Commit as it goes: fetches are suspended for the drag, and the
+        // scene re-windows the cached disc at frame rate.
         setBbox(movedBbox(move.bbox, e.latlng.lat - move.at.lat, e.latlng.lng - move.at.lng));
         return;
       }
@@ -150,7 +151,11 @@ export default function MapPanel() {
       setOverSelection(insideSelection(lat, lng));
     });
     map.on("mouseup", (e) => {
-      setMoveStart(undefined);
+      if (moveStart()) {
+        setMoveStart(undefined);
+        resumeFetch();
+        return;
+      }
       const start = drawStart();
       if (!start) return;
       setDrawStart(undefined);

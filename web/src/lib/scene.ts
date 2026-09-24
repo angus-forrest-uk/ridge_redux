@@ -6,7 +6,7 @@ import { evalCmap, parseColor, resolveLineColor, type LineColor, type Rgb } from
 import type { ElevationRequest, Params } from "./params.ts";
 import {
   buildLayout, buildRows, frameBounds, preprocessGrid, rotatePlane, sampleWindow,
-  type Layout, type Prepared, type Row,
+  type Bbox, type Layout, type Prepared, type Row,
 } from "./pipeline.ts";
 
 /* The grid /api/elevation returned, with the request that produced it. */
@@ -55,10 +55,13 @@ export interface Scene {
   style: Style;
 }
 
-/* The disc the grid was sampled over: its side and south-west corner. */
+/* The disc the grid was sampled over: its side and south-west corner.
+ * Rect requests add move_margin on every side, so the disc extends past
+ * the bbox and a moved selection re-windows the same grid. */
 function disc(req: ElevationRequest) {
   const [lon0, lat0, lon1, lat1] = req.bbox;
-  const span = req.span_deg || Math.hypot(lon1 - lon0, lat1 - lat0);
+  const margin = req.region === "rect" ? req.move_margin : 0;
+  const span = (req.span_deg || Math.hypot(lon1 - lon0, lat1 - lat0)) + 2 * margin;
   return { span, lat0: (lat0 + lat1) / 2 - span / 2, lon0: (lon0 + lon1) / 2 - span / 2 };
 }
 
@@ -82,6 +85,30 @@ export function prepare(raw: Raw, p: Pick<Params, "water_ntile" | "lake_flatness
   );
 }
 
+/* The bbox whose disc-space image is the view window. The fetched disc is
+ * bigger than the view (move_margin), so a moved selection is served by
+ * re-windowing the SAME grid. rotatePlane maps a grid position p to the
+ * source cell M·(p − c) + c, so world w appears at Mᵀ·(F(w) − c) + c; the
+ * window for a bbox translated by o (from the fetched center) therefore
+ * centers at F(center) + Mᵀ·o, i.e. the live bbox shifted by (Mᵀ − I)·o.
+ * At angle 0 that is exactly the live bbox, so drags compose with the
+ * rotation in screen space. Beyond the margin the window reads NaN
+ * padding; the state layer then refetches. */
+export function windowBbox(req: ElevationRequest, params: Params): Bbox {
+  const [w, s, e, n] = params.bbox;
+  const cLng = (req.bbox[0] + req.bbox[2]) / 2;
+  const cLat = (req.bbox[1] + req.bbox[3]) / 2;
+  const oLat = (s + n) / 2 - cLat;
+  const oLng = (w + e) / 2 - cLng;
+  const a = ((-params.viewpoint_angle % 360) + 360) % 360;
+  const rad = (a * Math.PI) / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const rLat = cos * oLat - sin * oLng; // Mᵀ · o
+  const rLng = sin * oLat + cos * oLng;
+  const dLat = rLat - oLat, dLng = rLng - oLng;
+  return [w + dLng, s + dLat, e + dLng, n + dLat];
+}
+
 /* Rotate the prepared grid, sample the display window and lay it out. Null
  * when nothing of the terrain is in view. */
 export function buildScene(raw: Raw, prepared: Prepared, params: Params): Scene | null {
@@ -94,7 +121,7 @@ export function buildScene(raw: Raw, prepared: Prepared, params: Params): Scene 
     const d = disc(req);
     vrows = Math.min(req.num_lines, raw.nrows);
     vcols = Math.min(req.elevation_pts, raw.ncols);
-    grid = sampleWindow(rotated, raw.nrows, d.lat0, d.lon0, d.span, req.bbox, vrows, vcols);
+    grid = sampleWindow(rotated, raw.nrows, d.lat0, d.lon0, d.span, windowBbox(req, params), vrows, vcols);
   }
   const rows = buildRows(grid, vrows, vcols);
   const bounds = frameBounds(rows, params.clip_to_land);

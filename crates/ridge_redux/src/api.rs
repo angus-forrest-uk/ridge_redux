@@ -682,6 +682,10 @@ pub struct ElevationParams {
     /// Side of the square region in degrees (disc mode). 0 = derive from the
     /// bbox diagonal, so the whole rectangle is inside the circle.
     pub span_deg: f64,
+    /// Extra degrees of disc around the bbox on every side (rect mode), so
+    /// the browser can move the selection and re-window the cached grid
+    /// without a refetch. 0 = the rotation-only disc.
+    pub move_margin: f64,
 }
 
 impl Default for ElevationParams {
@@ -693,6 +697,7 @@ impl Default for ElevationParams {
             elevation_pts: d.elevation_pts,
             region: d.region,
             span_deg: d.span_deg,
+            move_margin: 0.0,
         }
     }
 }
@@ -707,6 +712,7 @@ impl ElevationParams {
         self.elevation_pts.hash(&mut h);
         self.region.hash(&mut h);
         self.span_deg.to_bits().hash(&mut h);
+        self.move_margin.to_bits().hash(&mut h);
         h.finish()
     }
 
@@ -732,8 +738,8 @@ impl ElevationParams {
     /// horizontal sampling (`elevation_pts` across the bbox width), so the
     /// rotated rectangle view keeps the same detail as the static one.
     /// Rect mode caps the grid at the display window's own diagonal node
-    /// count — more nodes could never be displayed, so a stale or
-    /// malicious span cannot blow up the response.
+    /// count plus the move margin's — more nodes could never be displayed
+    /// statically, so a stale or malicious span cannot blow up the response.
     fn underlying_n(&self) -> usize {
         let b = self.bbox_struct();
         let dlon = (b.lon1 - b.lon0).abs();
@@ -742,11 +748,22 @@ impl ElevationParams {
         } else {
             self.span()
         };
-        let n = (self.span() / step).ceil() as usize;
+        let margin = if self.is_disc() {
+            0.0
+        } else {
+            self.move_margin.clamp(0.0, 5.0)
+        };
+        let span_eff = self.span() + 2.0 * margin;
+        let n = (span_eff / step).ceil() as usize;
         let diag_cells = ((self.num_lines.pow(2) + self.elevation_pts.pow(2)) as f64)
             .sqrt()
             .ceil() as usize;
-        let cap = if self.is_disc() { 4000 } else { diag_cells + 2 };
+        let move_cells = if step > 0.0 {
+            (2.0 * margin / step).ceil() as usize
+        } else {
+            0
+        };
+        let cap = diag_cells + move_cells + 2;
         n.clamp(self.num_lines.max(self.elevation_pts).min(cap), cap.max(1))
     }
 
@@ -776,6 +793,9 @@ pub async fn elevation(
     let bbox = params.bbox_struct();
     if !bbox.is_valid() {
         return Err(ApiError::bad_request("invalid bbox"));
+    }
+    if !(0.0..=5.0).contains(&params.move_margin) {
+        return Err(ApiError::bad_request("move_margin must be in 0..=5"));
     }
     let grid = load_elevation(&state, &params).await?;
     Ok(Json(elevation_response(&grid, &params)))
@@ -849,13 +869,16 @@ fn spawn_surrounding_preload(state: &AppState, bbox: &Bbox) {
 
 /// The `/api/elevation` request the frontend makes on a fresh load (the
 /// White Mountains): its defaults, with `span_deg` resolved to the bbox
-/// diagonal at 4 decimals as `withSpan` in web/src/state.ts does. It must
-/// match that request exactly, or its cache key won't.
+/// diagonal at 4 decimals as `withSpan` in web/src/state.ts does, and the
+/// move margin half the diagonal. It must match that request exactly, or
+/// its cache key won't.
 fn default_scene_request() -> ElevationParams {
     let mut params = ElevationParams::default();
     let b = params.bbox_struct();
     let diagonal = (b.lon1 - b.lon0).hypot(b.lat1 - b.lat0);
     params.span_deg = format!("{diagonal:.4}").parse().expect("formatted f64");
+    let d4: f64 = format!("{diagonal:.4}").parse().expect("formatted f64");
+    params.move_margin = format!("{:.4}", d4 * 0.5).parse().expect("formatted f64");
     params
 }
 

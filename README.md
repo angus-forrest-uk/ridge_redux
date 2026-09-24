@@ -141,7 +141,13 @@ tile, ever): `~/.cache` on Linux, `~/Library/Caches` on macOS and
 `%LOCALAPPDATA%` on Windows. `--cache-dir` puts it somewhere else. Each
 view also prefetches the surrounding ring of tiles in the background, so
 moving the selection samples tiles that are already local. Drag to pan,
-wheel to zoom: both instant, purely client-side. The
+**Canvas**: a toggle above the artwork switches between **pan** (drag to
+slide the view) and **move** (drag to move the area — the selection follows
+on the map too). Move is seamless like rotation: each view fetches its disc
+plus a `move_margin` of extra terrain, so the drag re-windows the cached
+disc at frame rate and only re-centers — silently, from local tiles — when
+it crosses the margin. Drag to pan, wheel to zoom: both instant, purely
+client-side. The
 **viewpoint-angle, water and relief sliders are also instant**: the server
 ships the raw elevation grid once per location/resolution
 (`POST /api/elevation`), and the browser rotates it about its center, masks

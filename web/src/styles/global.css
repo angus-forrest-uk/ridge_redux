@@ -55,6 +55,10 @@ main {
 
 #canvas { width: 100%; height: 100%; display: block; cursor: grab; }
 #canvas.dragging { cursor: grabbing; }
+#canvas.move-mode { cursor: move; }
+#canvas.move-dragging { cursor: grabbing; }
+#stage-tools { position: absolute; top: 8px; right: 8px; z-index: 500; display: flex; }
+#stage-tools button:last-child { border-left: none; }
 
 #status, #hint, #map-hint {
   position: absolute;

@@ -73,8 +73,13 @@ export const DEFAULTS: Params = {
 };
 
 /* The parameters that change the sampled data, so a change needs a new
- * /api/elevation fetch. Everything else is redrawn locally. */
-export type ElevationRequest = Pick<Params, "bbox" | "num_lines" | "elevation_pts" | "region" | "span_deg">;
+ * /api/elevation fetch. Everything else is redrawn locally. move_margin is
+ * the extra disc the server adds around the bbox (rect mode), so the view
+ * can be moved by re-windowing the cached grid without a refetch. */
+export type ElevationRequest = Pick<
+  Params,
+  "bbox" | "num_lines" | "elevation_pts" | "region" | "span_deg"
+> & { move_margin: number };
 
 export const SRTM_LAT_MAX = 60; // SRTM covers 60S..60N; the server rejects beyond it
 
@@ -85,6 +90,13 @@ export const clampLng = (v: number) => Math.min(180, Math.max(-180, v));
 export function diagonal(bbox: Bbox, digits = 6): number {
   const [lon0, lat0, lon1, lat1] = bbox;
   return Number(Math.hypot(lon1 - lon0, lat1 - lat0).toFixed(digits));
+}
+
+/* How far the bbox may move in any direction while staying inside the
+ * fetched disc: half its diagonal. Sent as move_margin so the server
+ * samples the bigger disc. Rounded exactly like the server computes it. */
+export function moveMargin(bbox: Bbox): number {
+  return Number((diagonal(bbox, 4) * 0.5).toFixed(4));
 }
 
 export interface LatLng {

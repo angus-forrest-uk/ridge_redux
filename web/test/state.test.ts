@@ -110,6 +110,24 @@ describe("data changes refetch", () => {
     expect(movedBbox([-179, -1, -177, 1], 0, -5)).toEqual([-180, -1, -178, 1]);
   });
 
+  test("the request carries the move margin for the rect region", () => {
+    // Half the bbox diagonal: the disc extends that far past the view, so
+    // a move re-windows the cached grid instead of refetching.
+    expect(elevationRequests[0]).toMatchObject({ move_margin: 0.6005 });
+  });
+
+  test("a suspended move-drag defers the fetch; resume loads at once", async () => {
+    state.suspendFetch();
+    state.setBbox(movedBbox(DEFAULTS.bbox, 0.1, 0.1));
+    await settle(400);
+    expect(elevationRequests).toHaveLength(1); // silent while dragging
+    state.resumeFetch();
+    await settle();
+    expect(elevationRequests).toHaveLength(2);
+    const req = elevationRequests[1] as { bbox: number[] };
+    expect(req.bbox[0]).toBeCloseTo(DEFAULTS.bbox[0] + 0.1, 6);
+  });
+
   test("a new area derives its span from that area", async () => {
     // A 0.04-degree box must not inherit the old 1.2-degree span: that would
     // blow the grid up to thousands of samples a side.
