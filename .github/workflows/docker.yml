@@ -86,9 +86,17 @@ jobs:
           cache-from: type=gha,scope=build-${{ matrix.scope }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.scope }}
       - name: Export the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           mkdir -p digests
-          echo "${{ steps.build.outputs.digest }}" > "digests/${{ matrix.scope }}"
+          printf '%s\n' "${DIGEST#sha256:}" > "digests/${{ matrix.scope }}"
+          # Fail here, not in the merge: an empty digest becomes an invalid
+          # image reference three steps later.
+          test -s "digests/${{ matrix.scope }}" || {
+            echo "::error::build-push-action reported no digest (got '$DIGEST')"
+            exit 1
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.scope }}
@@ -134,6 +142,7 @@ jobs:
           MINOR: ${{ steps.ver.outputs.minor }}
           RELEASE: ${{ steps.ver.outputs.release }}
         run: |
+          wc -c digests/*
           args=()
           for tag in "$VERSION" "$MINOR"; do
             args+=(-t "$image:$tag")
@@ -141,12 +150,18 @@ jobs:
           if [ "$RELEASE" = "true" ]; then
             args+=(-t "$image:latest")
           fi
-          digests=()
+          refs=()
           for arch in amd64 arm64; do
-            d=$(cat "digests/$arch")
-            digests+=("$image@sha256:${d#sha256:}")
+            d=$(tr -d '[:space:]' < "digests/$arch")
+            case "$d" in
+              *[^0-9a-f]* | '')
+                echo "::error::bad digest for $arch: '$d'"
+                exit 1
+                ;;
+            esac
+            refs+=("$image@sha256:$d")
           done
-          docker buildx imagetools create "${args[@]}" "${digests[@]}"
+          docker buildx imagetools create "${args[@]}" "${refs[@]}"
       # The image just shipped: prove it serves. Connections queue until the
       # default scene is prefetched, so the first curl waits for the tiles.
       - name: Smoke test the pushed image
