@@ -145,10 +145,10 @@ jobs:
           wc -c digests/*
           args=()
           for tag in "$VERSION" "$MINOR"; do
-            args+=(-t "$image:$tag")
+            args+=(-t "$IMAGE:$tag")
           done
           if [ "$RELEASE" = "true" ]; then
-            args+=(-t "$image:latest")
+            args+=(-t "$IMAGE:latest")
           fi
           refs=()
           for arch in amd64 arm64; do
@@ -159,7 +159,7 @@ jobs:
                 exit 1
                 ;;
             esac
-            refs+=("$image@sha256:$d")
+            refs+=("$IMAGE@sha256:$d")
           done
           docker buildx imagetools create "${args[@]}" "${refs[@]}"
       # The image just shipped: prove it serves. Connections queue until the
