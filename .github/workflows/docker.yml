@@ -1,14 +1,20 @@
 name: Docker
 
 # Build and push the app image to ghcr.io on every release, for amd64 and
-# arm64. Release builds arrive as a repository_dispatch from the Release-plz
-# workflow: tags and releases it creates with the default GITHUB_TOKEN don't
-# trigger workflows, so it hands off explicitly. Pushing an `ridge_redux-v*`
-# tag by hand or running this workflow from the Actions tab work too. A
-# manual run lands on the `edge` tag by default; give it the optional `tag`
-# input (e.g. ridge_redux-v0.4.1) to rebuild a release's version tags from
-# main — use it when the release's own build failed and the fix only touches
-# build files, so main's code equals the tag's code.
+# arm64. Each platform builds natively, in parallel, on its own runner —
+# GitHub's arm64 runners are free for public repos, and QEMU emulation made
+# the arm64 compile ~10x slower. Each job pushes its image by digest; a
+# merge job then joins them into one multi-platform manifest and tags it.
+#
+# Release builds arrive as a repository_dispatch from the Release-plz
+# workflow: tags and releases it creates with the default GITHUB_TOKEN
+# don't trigger workflows, so it hands off explicitly. Pushing an
+# `ridge_redux-v*` tag by hand or running this workflow from the Actions
+# tab work too. A manual run lands on the `edge` tag by default; give it
+# the optional `tag` input (e.g. ridge_redux-v0.4.1) to rebuild a
+# release's version tags from main — use it when the release's own build
+# failed and the fix only touches build files, so main's code equals the
+# tag's code.
 #
 # Tag policy: every release keeps `X.Y.Z` and `X.Y`, and `latest` moves. To
 # keep ONLY the most recent image, delete the two `type=raw` version rules
@@ -40,17 +46,75 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  image:
-    name: Build and push
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
     if: github.repository_owner == 'angus-forrest-uk'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            scope: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            scope: arm64
     steps:
       - uses: actions/checkout@v7
         with:
           # Dispatches name the release tag, so the image is built from the
           # exact commit that was released.
-          ref: ${{ github.event.client_payload.tag || github.ref }}
+          ref: ${{ github.event.client_payload.tag || inputs.tag || github.ref }}
           persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          # One platform per job, merged later: an attestation index would
+          # nest inside the merged manifest.
+          provenance: false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          # Per-arch scopes, so the two jobs don't thrash one cache.
+          cache-from: type=gha,scope=build-${{ matrix.scope }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.scope }}
+      - name: Export the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p digests
+          printf '%s\n' "${DIGEST#sha256:}" > "digests/${{ matrix.scope }}"
+          # Fail here, not in the merge: an empty digest becomes an invalid
+          # image reference three steps later.
+          test -s "digests/${{ matrix.scope }}" || {
+            echo "::error::build-push-action reported no digest (got '$DIGEST')"
+            exit 1
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.scope }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge, tag and smoke test
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.repository_owner == 'angus-forrest-uk'
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: digests
+          pattern: digests-*
+          merge-multiple: true
       - name: Resolve the image version
         id: ver
         env:
@@ -66,36 +130,45 @@ jobs:
             echo "minor=${version%.*}"
             echo "release=$([ "$version" != edge ] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.ver.outputs.version }}
-            type=raw,value=${{ steps.ver.outputs.minor }},enable=${{ steps.ver.outputs.version != steps.ver.outputs.minor }}
-            type=raw,value=latest,enable=${{ steps.ver.outputs.release == 'true' }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Merge the platform images and tag them
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          MINOR: ${{ steps.ver.outputs.minor }}
+          RELEASE: ${{ steps.ver.outputs.release }}
+        run: |
+          wc -c digests/*
+          args=()
+          for tag in "$VERSION" "$MINOR"; do
+            args+=(-t "$IMAGE:$tag")
+          done
+          if [ "$RELEASE" = "true" ]; then
+            args+=(-t "$IMAGE:latest")
+          fi
+          refs=()
+          for arch in amd64 arm64; do
+            d=$(tr -d '[:space:]' < "digests/$arch")
+            case "$d" in
+              *[^0-9a-f]* | '')
+                echo "::error::bad digest for $arch: '$d'"
+                exit 1
+                ;;
+            esac
+            refs+=("$IMAGE@sha256:$d")
+          done
+          docker buildx imagetools create "${args[@]}" "${refs[@]}"
       # The image just shipped: prove it serves. Connections queue until the
       # default scene is prefetched, so the first curl waits for the tiles.
       - name: Smoke test the pushed image
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.ver.outputs.version }}
         run: |
-          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.ver.outputs.version }}"
-          docker run -d --name ridge -p 8420:8420 "$image"
+          docker run -d --name ridge -p 8420:8420 "$IMAGE"
           for _ in $(seq 60); do curl -sfm 5 http://127.0.0.1:8420/healthz && break; sleep 1; done
           curl -sf http://127.0.0.1:8420/ | grep -q '<title>ridge-redux'
           curl -sf http://127.0.0.1:8420/api/presets | grep -q 'White Mountains'
