@@ -1,0 +1,91 @@
+name: Docker
+
+# Build and push the app image to ghcr.io on every release, for amd64 and
+# arm64. Release builds arrive as a repository_dispatch from the Release-plz
+# workflow: tags and releases it creates with the default GITHUB_TOKEN don't
+# trigger workflows, so it hands off explicitly. Pushing an `ridge_redux-v*`
+# tag by hand or running this workflow from the Actions tab work too; manual
+# builds land on the `edge` tag instead of `latest`.
+#
+# Tag policy: every release keeps `X.Y.Z` and `X.Y`, and `latest` moves. To
+# keep ONLY the most recent image, delete the two `type=raw` version rules
+# (and optionally add a package cleanup workflow — ghcr never expires tags
+# on its own).
+
+on:
+  push:
+    tags: ["ridge_redux-v*"]
+  workflow_dispatch:
+  repository_dispatch:
+    types: [ridge-redux-released]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  image:
+    name: Build and push
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'angus-forrest-uk'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Dispatches name the release tag, so the image is built from the
+          # exact commit that was released.
+          ref: ${{ github.event.client_payload.tag || github.ref }}
+          persist-credentials: false
+      - name: Resolve the image version
+        id: ver
+        run: |
+          tag="${{ github.event.client_payload.tag || github.ref_name }}"
+          version="${tag#ridge_redux-v}"
+          # Not a release tag (a manual run from a branch): don't invent a
+          # version, land it on edge.
+          if [ "$version" = "$tag" ]; then version=edge; fi
+          {
+            echo "version=$version"
+            echo "minor=${version%.*}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.ver.outputs.version }}
+            type=raw,value=${{ steps.ver.outputs.minor }},enable=${{ steps.ver.outputs.version != steps.ver.outputs.minor }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' || github.event_name == 'repository_dispatch' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # The image just shipped: prove it serves. Connections queue until the
+      # default scene is prefetched, so the first curl waits for the tiles.
+      - name: Smoke test the pushed image
+        run: |
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.ver.outputs.version }}"
+          docker run -d --name ridge -p 8420:8420 "$image"
+          for _ in $(seq 60); do curl -sfm 5 http://127.0.0.1:8420/healthz && break; sleep 1; done
+          curl -sf http://127.0.0.1:8420/ | grep -q '<title>ridge-redux'
+          curl -sf http://127.0.0.1:8420/api/presets | grep -q 'White Mountains'
+          docker rm -f ridge

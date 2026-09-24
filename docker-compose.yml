@@ -1,0 +1,17 @@
+# Run the published image: `docker compose up -d`, then
+# http://127.0.0.1:8420. Tiles persist in the `ridge-cache` volume, one
+# fetch per tile, ever.
+services:
+  ridge-redux:
+    image: ghcr.io/angus-forrest-uk/ridge_redux:latest
+    container_name: ridge-redux
+    restart: unless-stopped
+    ports:
+      # The server has no authentication; publish to loopback unless you
+      # trust everyone on your network (then use "8420:8420").
+      - "127.0.0.1:8420:8420"
+    volumes:
+      - ridge-cache:/data
+
+volumes:
+  ridge-cache:

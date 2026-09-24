@@ -63,6 +63,36 @@ cargo run --release
 # opens http://127.0.0.1:8420 in your browser
 ```
 
+**With Docker**
+
+Every release publishes an image to ghcr.io, for amd64 and arm64 — no Rust
+or Node needed to run it. Install Docker the usual way on your platform:
+
+```bash
+# Debian/Ubuntu
+sudo apt install docker.io docker-compose-v2
+# Arch
+sudo pacman -S docker docker-compose && sudo systemctl enable --now docker
+# macOS (Docker Desktop, native on Apple Silicon and Intel)
+brew install --cask docker
+```
+
+On Linux, add yourself to the `docker` group so sudo isn't needed for every
+command (`sudo usermod -aG docker $USER`, then log out and back in). Then,
+on any of the three:
+
+```bash
+docker run --rm -p 127.0.0.1:8420:8420 -v ridge-cache:/data \
+  ghcr.io/angus-forrest-uk/ridge_redux
+# then open http://127.0.0.1:8420 (the container can't open a browser)
+```
+
+The repo also has a `docker-compose.yml` (`docker compose up -d`). The
+container listens on `0.0.0.0` inside its own network, so both examples
+publish the port to loopback; change the mapping to `"8420:8420"` for LAN
+access (the server has no authentication — see Security). Downloaded tiles
+persist in the `ridge-cache` volume.
+
 ## Why a local server?
 
 ridge-redux runs as a small server on your own machine, and you use it in

@@ -1,0 +1,15 @@
+# Build artifacts and anything the image build doesn't need. web/dist is
+# excluded so the frontend is always built in-image, never copied stale.
+.git
+target
+coverage.json
+badge
+docs
+examples
+fixtures
+scripts/.venv
+scripts/node_modules
+web/node_modules
+web/.astro
+web/dist
+*.hgt
