@@ -3,7 +3,7 @@
 // without touching the network.
 import { createRoot } from "solid-js";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { DEFAULTS, selectionBbox, startsSelection } from "../src/lib/params.ts";
+import { DEFAULTS, movedBbox, selectionBbox, startsSelection } from "../src/lib/params.ts";
 import { createRidgeState, type RidgeState } from "../src/state.ts";
 
 // A 10x10 grid with an ocean void and a flat patch, the shape the backend returns.
@@ -74,6 +74,31 @@ describe("data changes refetch", () => {
     await settle(400);
     expect(elevationRequests).toHaveLength(2);
     expect(elevationRequests[1]).toMatchObject({ num_lines: 100 });
+  });
+
+  test("moving the bbox keeps its size and debounces into one fetch", async () => {
+    const [, lat0, , lat1] = DEFAULTS.bbox;
+    const w = DEFAULTS.bbox[2] - DEFAULTS.bbox[0], h = lat1 - lat0;
+    // What a drag does: a burst of positions, each committed to the store.
+    for (const [dLat, dLng] of [[0.05, 0.05], [0.1, 0.1], [0.15, 0.05]]) {
+      state.setBbox(movedBbox(DEFAULTS.bbox, dLat, dLng));
+    }
+    expect(state.status().text).toBe("queued…");
+    await settle(400);
+    expect(elevationRequests).toHaveLength(2);
+    const req = elevationRequests[1] as { bbox: number[]; span_deg: number };
+    expect(req.bbox[2] - req.bbox[0]).toBeCloseTo(w, 6);
+    expect(req.bbox[3] - req.bbox[1]).toBeCloseTo(h, 6);
+    expect(req.span_deg).toBeCloseTo(Math.hypot(w, h), 4);
+  });
+
+  test("movedBbox translates and clamps to coverage, keeping the shape", () => {
+    const bbox: [number, number, number, number] = [-2, -1, 0, 1];
+    expect(movedBbox(bbox, 0.5, 1)).toEqual([-1, -0.5, 1, 1.5]);
+    // Pushed past the north edge: it slides along it.
+    expect(movedBbox([-2, 57, 0, 59], 5, 0)).toEqual([-2, 58, 0, 60]);
+    // Pushed past the antimeridian: clamped the same way.
+    expect(movedBbox([-179, -1, -177, 1], 0, -5)).toEqual([-180, -1, -178, 1]);
   });
 
   test("a new area derives its span from that area", async () => {

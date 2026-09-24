@@ -101,6 +101,18 @@ export function selectionBbox(a: LatLng, b: LatLng): Bbox | null {
   return [w, s, e, n].map((v) => Number(v.toFixed(6))) as Bbox;
 }
 
+/* The bbox translated by (dLat, dLng), clamped so it stays whole inside
+ * SRTM coverage: the dimensions never change, only where it sits. */
+export function movedBbox([lon0, lat0, lon1, lat1]: Bbox, dLat: number, dLng: number): Bbox {
+  let lat = dLat;
+  if (lat1 + lat > SRTM_LAT_MAX) lat = SRTM_LAT_MAX - lat1;
+  if (lat0 + lat < -SRTM_LAT_MAX) lat = -SRTM_LAT_MAX - lat0;
+  let lng = dLng;
+  if (lon1 + lng > 180) lng = 180 - lon1;
+  if (lon0 + lng < -180) lng = -180 - lon0;
+  return [lon0 + lng, lat0 + lat, lon1 + lng, lat1 + lat].map((v) => Number(v.toFixed(6))) as Bbox;
+}
+
 export type MapTool = "move" | "select";
 
 /* Whether a press on the map starts drawing a selection: always with the

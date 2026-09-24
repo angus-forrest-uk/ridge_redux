@@ -178,6 +178,8 @@ textarea { width: 100%; resize: vertical; }
 #map .leaflet-tile-pane { filter: grayscale(1) contrast(1.2); }
 #map.select-mode { cursor: crosshair; }
 #map.leaflet-drawing { cursor: nwse-resize; }
+#map.over-selection { cursor: move; }
+#map.moving-selection { cursor: grabbing; }
 #map-tools {
   position: absolute;
   top: 8px;

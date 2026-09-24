@@ -2,7 +2,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import {
-  clampLat, clampLng, selectionBbox, SRTM_LAT_MAX, startsSelection, type LatLng, type MapTool,
+  clampLat, clampLng, movedBbox, selectionBbox, SRTM_LAT_MAX, startsSelection, type LatLng, type MapTool,
 } from "../lib/params.ts";
 import type { Bbox } from "../lib/pipeline.ts";
 import { useRidge } from "../state.ts";
@@ -14,12 +14,15 @@ const toBounds = ([lon0, lat0, lon1, lat1]: Bbox): L.LatLngBoundsExpression => [
 ];
 
 /* The location map: pan it with the move tool, drag out the area to render
- * with the select tool. */
+ * with the select tool, and drag the selection to move it as-is. */
 export default function MapPanel() {
   const { params, setBbox, recenter } = useRidge();
   const [tool, setTool] = createSignal<MapTool>("move");
   const [open, setOpen] = createSignal(true);
   const [drawStart, setDrawStart] = createSignal<LatLng>();
+  // A move drag: where it started, and the bbox it started from.
+  const [moveStart, setMoveStart] = createSignal<{ at: LatLng; bbox: Bbox }>();
+  const [overSelection, setOverSelection] = createSignal(false);
   let container!: HTMLDivElement;
 
   onMount(() => {
@@ -56,31 +59,62 @@ export default function MapPanel() {
       map.fitBounds(toBounds(params.bbox), { padding: [12, 12] });
       fitWorldWidth();
     }));
-    // Panning belongs to the move tool.
+    // Panning belongs to the move tool, and pauses for any map drag.
     createEffect(() => {
-      if (tool() === "select" || drawStart()) map.dragging.disable();
+      if (tool() === "select" || drawStart() || moveStart()) map.dragging.disable();
       else map.dragging.enable();
+    });
+    // Releasing the button off the map must still end a move drag.
+    createEffect(() => {
+      if (!moveStart()) return;
+      const commit = () => setMoveStart(undefined);
+      document.addEventListener("mouseup", commit);
+      onCleanup(() => document.removeEventListener("mouseup", commit));
     });
     // Leaflet has to re-measure once the panel is shown again.
     createEffect(on(open, (isOpen) => {
       if (isOpen) setTimeout(() => map.invalidateSize(), 60);
     }, { defer: true }));
 
+    const insideSelection = (lat: number, lng: number) => {
+      const [w, s, e, n] = params.bbox;
+      return lng >= w && lng <= e && lat >= s && lat <= n;
+    };
+
     map.on("mousedown", (e) => {
+      const lat = clampLat(e.latlng.lat), lng = clampLng(e.latlng.lng);
+      // A drag inside the selection moves it as-is; Shift still draws.
+      if (!e.originalEvent.shiftKey && insideSelection(lat, lng)) {
+        setMoveStart({ at: { lat, lng }, bbox: [...params.bbox] as Bbox });
+        return;
+      }
       if (!startsSelection(tool(), e.originalEvent.shiftKey)) return;
-      const start = { lat: clampLat(e.latlng.lat), lng: clampLng(e.latlng.lng) };
+      const start = { lat, lng };
       setDrawStart(start);
       rect.setBounds(L.latLngBounds(start, start));
     });
     map.on("mousemove", (e) => {
+      const lat = clampLat(e.latlng.lat), lng = clampLng(e.latlng.lng);
+      const move = moveStart();
+      if (move) {
+        // Commit as it goes: the store debounces the refetch, so the
+        // scene follows a pause in the drag without waiting for mouseup.
+        setBbox(movedBbox(move.bbox, e.latlng.lat - move.at.lat, e.latlng.lng - move.at.lng));
+        return;
+      }
       const start = drawStart();
-      if (start) rect.setBounds(L.latLngBounds(start, { lat: clampLat(e.latlng.lat), lng: clampLng(e.latlng.lng) }));
+      if (start) {
+        rect.setBounds(L.latLngBounds(start, { lat, lng }));
+        return;
+      }
+      setOverSelection(insideSelection(lat, lng));
     });
     map.on("mouseup", (e) => {
+      setMoveStart(undefined);
       const start = drawStart();
       if (!start) return;
-      const bbox = selectionBbox(start, e.latlng);
       setDrawStart(undefined);
+      const bbox = selectionBbox(start, e.latlng);
       if (bbox) setBbox(bbox);
     });
   });
@@ -88,14 +122,19 @@ export default function MapPanel() {
   return (
     <section id="map-panel" classList={{ closed: !open() }}>
       <div id="map-panel-head" title="click to collapse / expand" onClick={() => setOpen(!open())}>
-        <span>location map, move to explore, select to pick the area</span>
+        <span>location map, move to explore, select to pick the area, drag the selection to move it</span>
         <button id="map-toggle">{open() ? "hide" : "show"}</button>
       </div>
       <div id="map-body">
         <div
           id="map"
           ref={container}
-          classList={{ "select-mode": tool() === "select", "leaflet-drawing": !!drawStart() }}
+          classList={{
+            "select-mode": tool() === "select",
+            "leaflet-drawing": !!drawStart(),
+            "over-selection": overSelection() && !moveStart() && !drawStart(),
+            "moving-selection": !!moveStart(),
+          }}
         />
         <div id="map-tools" role="group" aria-label="map tool">
           <button
