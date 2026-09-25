@@ -140,15 +140,14 @@ them in `ridge-redux/srtm` under your OS cache directory (one fetch per
 tile, ever): `~/.cache` on Linux, `~/Library/Caches` on macOS and
 `%LOCALAPPDATA%` on Windows. `--cache-dir` puts it somewhere else. Each
 view also prefetches the surrounding ring of tiles in the background, so
-moving the selection samples tiles that are already local.
-
+moving the selection samples tiles that are already local. Drag to pan,
 **Canvas**: a toggle above the artwork switches between **pan** (drag to
-slide the view) and **move** (drag to slide the terrain — the area moves
-with your hand, and the map selection rides along). Move is seamless like
-rotation: each view fetches its disc plus a `move_margin` of extra terrain,
-so the drag re-windows the cached disc at frame rate and only re-centers —
-silently, from local tiles — when it crosses the margin. Drag to pan, wheel
-to zoom: both instant, purely client-side. The
+slide the view) and **move** (drag to move the area — the selection follows
+on the map too). Move is seamless like rotation: each view fetches its disc
+plus a `move_margin` of extra terrain, so the drag re-windows the cached
+disc at frame rate and only re-centers — silently, from local tiles — when
+it crosses the margin. Drag to pan, wheel to zoom: both instant, purely
+client-side. The
 **viewpoint-angle, water and relief sliders are also instant**: the server
 ships the raw elevation grid once per location/resolution
 (`POST /api/elevation`), and the browser rotates it about its center, masks
@@ -164,10 +163,10 @@ current one, resolves the region span and re-centers the map.
 **Map picker**: the bottom panel hosts an OpenStreetMap slippy map with two
 tools. **Move** (the default) drags to pan. **Select** drags to draw the
 bounding box, and holding Shift draws one without leaving Move. Dragging
-the map slides the area under your hand — the dimensions stay fixed, only
+**inside** the selection moves it as-is — the dimensions stay fixed, only
 the center changes — which makes nudging a view around cheap: the
 surrounding tiles are already prefetched, so the refetch is sampling only.
-(The same grab rule is what a later reshape — dragging a single edge — will
+(The same drag rule is what a later reshape — dragging a single edge — will
 build on.) The box syncs both ways with the coordinate inputs and presets.
 Tiles the server has locally are shaded green, and everything beyond SRTM
 coverage (|φ| > 60°) is shaded out with a dashed boundary; drawn selections

@@ -16,14 +16,12 @@ function moveDelta(
   layout: Layout, scale: number, dxPx: number, dyPx: number,
 ): { dLat: number; dLng: number } {
   const [w, s, e, n] = paramsBbox;
-  // Grab semantics: content follows the pointer, so the viewport (and the
-  // bbox) moves OPPOSITE the pointer delta.
   const cellPerPxX = (layout.xlim[1] - layout.xlim[0]) / (layout.axes[2] - layout.axes[0]) / scale;
   const displayPerPxY = (layout.ylim[1] - layout.ylim[0]) / (layout.axes[3] - layout.axes[1]) / scale;
-  const dLng = -dxPx * cellPerPxX * ((e - w) / Math.max(1, elevationPts - 1));
-  // Rows are spaced LINE_SPACING display units apart and run northward;
-  // grabbing downward slides the terrain down, i.e. the view north.
-  const dLat = (dyPx * displayPerPxY / LINE_SPACING) * ((n - s) / Math.max(1, numLines));
+  const dLng = dxPx * cellPerPxX * ((e - w) / Math.max(1, elevationPts - 1));
+  // Rows are spaced LINE_SPACING display units apart and run northward,
+  // while canvas y runs down: the sign flips.
+  const dLat = -(dyPx * displayPerPxY / LINE_SPACING) * ((n - s) / Math.max(1, numLines));
   return { dLat, dLng };
 }
 

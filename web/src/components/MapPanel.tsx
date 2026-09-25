@@ -138,12 +138,9 @@ export default function MapPanel() {
       const lat = clampLat(e.latlng.lat), lng = clampLng(e.latlng.lng);
       const move = moveStart();
       if (move) {
-        // Grab semantics, as with the canvas: the terrain follows the hand
-        // (so the bbox moves opposite the pointer delta), fetches stay
-        // suspended, and the scene re-windows the cached disc per frame.
-        const dLat = move.at.lat - e.latlng.lat;
-        const dLng = move.at.lng - e.latlng.lng;
-        setBbox(movedBbox(move.bbox, dLat, dLng));
+        // Commit as it goes: fetches are suspended for the drag, and the
+        // scene re-windows the cached disc at frame rate.
+        setBbox(movedBbox(move.bbox, e.latlng.lat - move.at.lat, e.latlng.lng - move.at.lng));
         return;
       }
       const start = drawStart();
