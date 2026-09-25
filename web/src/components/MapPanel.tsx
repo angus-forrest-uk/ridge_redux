@@ -20,8 +20,16 @@ export default function MapPanel() {
   const [tool, setTool] = createSignal<MapTool>("move");
   const [open, setOpen] = createSignal(true);
   const [drawStart, setDrawStart] = createSignal<LatLng>();
-  // A move drag: where it started, and the bbox it started from.
-  const [moveStart, setMoveStart] = createSignal<{ at: LatLng; bbox: Bbox }>();
+  // A move drag: the bbox it started from, the map center it started
+  // from, and whether the map actually panned yet. The drag IS a Leaflet
+  // pan — the basemap and the rectangle slide with the hand — and each
+  // pan step translates the bbox by the center delta.
+  const [moveStart, setMoveStart] = createSignal<{
+    bbox: Bbox;
+    center: LatLng;
+    moved: boolean;
+    finishing: boolean;
+  }>();
   const [overSelection, setOverSelection] = createSignal(false);
   let container!: HTMLDivElement;
 
@@ -118,17 +126,29 @@ export default function MapPanel() {
       map.fitBounds(toBounds(params.bbox), { padding: [12, 12] });
       fitWorldWidth();
     }));
-    // Panning belongs to the move tool, and pauses for any map drag.
+    // Panning is the move gesture itself; only the select tool and an
+    // active draw need the map pinned.
     createEffect(() => {
-      if (tool() === "select" || drawStart() || moveStart()) map.dragging.disable();
+      if (tool() === "select" || drawStart()) map.dragging.disable();
       else map.dragging.enable();
     });
-    // Releasing the button off the map must still end a move drag.
-    createEffect(() => {
+    // The drag pans the map natively (inertia included); the selection
+    // rides the pan, and the fetch resumes when the map settles.
+    map.on("move", () => {
+      const move = moveStart();
+      if (!move || move.finishing) return;
+      const c = map.getCenter();
+      const dLat = c.lat - move.center.lat;
+      const dLng = c.lng - move.center.lng;
+      if (!dLat && !dLng) return;
+      move.center = { lat: c.lat, lng: c.lng };
+      move.moved = true;
+      setBbox(movedBbox(move.bbox, dLat, dLng));
+    });
+    map.on("moveend", () => {
       if (!moveStart()) return;
-      const commit = () => setMoveStart(undefined);
-      document.addEventListener("mouseup", commit);
-      onCleanup(() => document.removeEventListener("mouseup", commit));
+      setMoveStart(undefined);
+      resumeFetch();
     });
     // Leaflet has to re-measure once the panel is shown again.
     createEffect(on(open, (isOpen) => {
@@ -142,9 +162,16 @@ export default function MapPanel() {
 
     map.on("mousedown", (e) => {
       const lat = clampLat(e.latlng.lat), lng = clampLng(e.latlng.lng);
-      // A drag inside the selection moves it as-is; Shift still draws.
-      if (!e.originalEvent.shiftKey && insideSelection(lat, lng)) {
-        setMoveStart({ at: { lat, lng }, bbox: [...params.bbox] as Bbox });
+      // A drag inside the selection (move tool) pans the map and carries
+      // the selection with it; Shift still draws.
+      if (!e.originalEvent.shiftKey && insideSelection(lat, lng) && tool() === "move") {
+        const c = map.getCenter();
+        setMoveStart({
+          bbox: [...params.bbox] as Bbox,
+          center: { lat: c.lat, lng: c.lng },
+          moved: false,
+          finishing: false,
+        });
         suspendFetch();
         return;
       }
@@ -154,25 +181,26 @@ export default function MapPanel() {
       rect.setBounds(L.latLngBounds(start, start));
     });
     map.on("mousemove", (e) => {
-      const lat = clampLat(e.latlng.lat), lng = clampLng(e.latlng.lng);
-      const move = moveStart();
-      if (move) {
-        // Commit as it goes: fetches are suspended for the drag, and the
-        // scene re-windows the cached disc at frame rate.
-        setBbox(movedBbox(move.bbox, e.latlng.lat - move.at.lat, e.latlng.lng - move.at.lng));
-        return;
-      }
       const start = drawStart();
       if (start) {
+        const lat = clampLat(e.latlng.lat), lng = clampLng(e.latlng.lng);
         rect.setBounds(L.latLngBounds(start, { lat, lng }));
         return;
       }
-      setOverSelection(insideSelection(lat, lng));
+      setOverSelection(
+        !moveStart() && insideSelection(clampLat(e.latlng.lat), clampLng(e.latlng.lng)),
+      );
     });
     map.on("mouseup", (e) => {
-      if (moveStart()) {
-        setMoveStart(undefined);
-        resumeFetch();
+      const move = moveStart();
+      if (move) {
+        if (move.moved) {
+          // Inertia may still be sliding the map: moveend finishes it.
+          setMoveStart({ ...move, finishing: true });
+        } else {
+          setMoveStart(undefined);
+          resumeFetch();
+        }
         return;
       }
       const start = drawStart();
