@@ -11,26 +11,34 @@ type CanvasTool = "pan" | "move";
 
 /* Canvas drag in move mode: the pointer delta (canvas px) translated into
  * bbox degrees at the MAP's own scale, so the same gesture travels the
- * same distance on both surfaces. Falls back to the figure layout when the
- * map hasn't reported a scale (panel never shown). */
+ * same distance on both surfaces — dragging down moves the selection (and
+ * the rendered terrain) down on both. Falls back to the figure layout
+ * when the map hasn't reported a scale (panel never shown). */
 function moveDelta(
   geoScale: { latPerPx: number; lngPerPx: number } | undefined,
   paramsBbox: Bbox, numLines: number, elevationPts: number,
   layout: Layout, scale: number, dxPx: number, dyPx: number,
 ): { dLat: number; dLng: number } {
+  const g = geoScale ?? fallbackGeoScale(paramsBbox, numLines, elevationPts, layout, scale);
+  // Dragging down moves the selection — and the rendered terrain — south,
+  // matching the map's grab-pan direction.
+  return { dLat: -dyPx * g.latPerPx, dLng: dxPx * g.lngPerPx };
+}
+
+/* Degrees per canvas pixel from the figure layout: horizontal through the
+ * axes rect (xlim is in window-cell units), vertical through the ridge
+ * baselines (LINE_SPACING display units per row). */
+function fallbackGeoScale(
+  paramsBbox: Bbox, numLines: number, elevationPts: number,
+  layout: Layout, scale: number,
+): { latPerPx: number; lngPerPx: number } {
   const [w, s, e, n] = paramsBbox;
-  if (geoScale) {
-    // Grab semantics: content follows the pointer, so the viewport (and
-    // the bbox) moves OPPOSITE the pointer delta.
-    return { dLat: dyPx * geoScale.latPerPx, dLng: -dxPx * geoScale.lngPerPx };
-  }
   const cellPerPxX = (layout.xlim[1] - layout.xlim[0]) / (layout.axes[2] - layout.axes[0]) / scale;
   const displayPerPxY = (layout.ylim[1] - layout.ylim[0]) / (layout.axes[3] - layout.axes[1]) / scale;
-  const dLng = -dxPx * cellPerPxX * ((e - w) / Math.max(1, elevationPts - 1));
-  // Rows are spaced LINE_SPACING display units apart and run northward;
-  // grabbing downward slides the terrain down, i.e. the view north.
-  const dLat = (dyPx * displayPerPxY / LINE_SPACING) * ((n - s) / Math.max(1, numLines));
-  return { dLat, dLng };
+  return {
+    lngPerPx: cellPerPxX * ((e - w) / Math.max(1, elevationPts - 1)),
+    latPerPx: (displayPerPxY / LINE_SPACING) * ((n - s) / Math.max(1, numLines)),
+  };
 }
 
 /* The artwork canvas. Drag pans or moves the area (toggle), the wheel
