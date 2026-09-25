@@ -43,17 +43,22 @@ export default function MapPanel() {
 
     // Publish the map's degrees per screen pixel: the canvas move-drag
     // travels at this scale, so the same gesture moves the selection the
-    // same amount on both surfaces.
+    // same amount on both surfaces. getBounds throws before the map has a
+    // view (fitBounds comes later), so swallow that first call.
     const publishGeoScale = () => {
-      const b = map.getBounds(), size = map.getSize();
-      if (size.x < 1 || size.y < 1) return;
-      setGeoScale({
-        latPerPx: Math.abs(b.getNorth() - b.getSouth()) / size.y,
-        lngPerPx: Math.abs(b.getEast() - b.getWest()) / size.x,
-      });
+      try {
+        const b = map.getBounds(), size = map.getSize();
+        if (size.x < 1 || size.y < 1) return;
+        setGeoScale({
+          latPerPx: Math.abs(b.getNorth() - b.getSouth()) / size.y,
+          lngPerPx: Math.abs(b.getEast() - b.getWest()) / size.x,
+        });
+      } catch {
+        /* no view yet */
+      }
     };
     map.on("move zoom viewreset resize", publishGeoScale);
-    publishGeoScale();
+    map.whenReady(publishGeoScale);
 
     // SRTM covers only 60S..60N; shade the rest. The outer corner sits at
     // the projection's own limit: 90° has no Mercator coordinates, and a
