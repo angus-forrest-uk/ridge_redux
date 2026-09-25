@@ -140,7 +140,8 @@ them in `ridge-redux/srtm` under your OS cache directory (one fetch per
 tile, ever): `~/.cache` on Linux, `~/Library/Caches` on macOS and
 `%LOCALAPPDATA%` on Windows. `--cache-dir` puts it somewhere else. Each
 view also prefetches the surrounding ring of tiles in the background, so
-moving the selection samples tiles that are already local. Drag to pan,
+moving the selection samples tiles that are already local.
+
 **Canvas**: a toggle above the artwork switches between **pan** (drag to
 slide the view) and **move** (drag to move the area — the selection follows
 on the map too). Move is seamless like rotation: each view fetches its disc
