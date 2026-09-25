@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.5.0...ridge_redux-v0.5.1) - 2026-09-25
+
+### Fixed
+
+- *(web)* move drags grab the terrain, consistently on both surfaces
+
 ## [0.5.0](https://github.com/angus-forrest-uk/ridge_redux/compare/ridge_redux-v0.4.3...ridge_redux-v0.5.0) - 2026-09-24
 
 ### Added
