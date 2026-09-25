@@ -36,6 +36,9 @@ export function createRidgeState(initial: Params = DEFAULTS) {
   // canvas move-drag travels the same world distance as the same gesture
   // on the map.
   const [geoScale, setGeoScale] = createSignal<{ latPerPx: number; lngPerPx: number }>();
+  // True while a move-drag re-windows the cached disc: the map panel
+  // follows the moving selection so both surfaces slide together.
+  const [followMap, setFollowMap] = createSignal(false);
   async function refreshTiles() {
     try {
       setTiles(await fetchTiles());
@@ -129,6 +132,8 @@ export function createRidgeState(initial: Params = DEFAULTS) {
     tiles,
     geoScale,
     setGeoScale,
+    followMap,
+    setFollowMap,
     /* Silence fetches while a move-drag re-windows the cached disc; the
      * drag ends with resumeFetch(), which loads the final position at
      * once. */

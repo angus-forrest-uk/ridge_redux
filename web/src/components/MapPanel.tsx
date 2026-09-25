@@ -16,7 +16,7 @@ const toBounds = ([lon0, lat0, lon1, lat1]: Bbox): L.LatLngBoundsExpression => [
 /* The location map: pan it with the move tool, drag out the area to render
  * with the select tool, and drag the selection to move it as-is. */
 export default function MapPanel() {
-  const { params, setBbox, recenter, tiles, setGeoScale, suspendFetch, resumeFetch } = useRidge();
+  const { params, setBbox, recenter, tiles, setGeoScale, followMap, setFollowMap, suspendFetch, resumeFetch } = useRidge();
   const [tool, setTool] = createSignal<MapTool>("move");
   const [open, setOpen] = createSignal(true);
   const [drawStart, setDrawStart] = createSignal<LatLng>();
@@ -132,6 +132,13 @@ export default function MapPanel() {
       if (tool() === "select" || drawStart()) map.dragging.disable();
       else map.dragging.enable();
     });
+    // While a move-drag re-windows the disc (canvas or map), keep the
+    // basemap centered on the selection so both surfaces slide together.
+    createEffect(() => {
+      if (!followMap() || moveStart()) return;
+      const b = params.bbox;
+      map.panTo([(b[1] + b[3]) / 2, (b[0] + b[2]) / 2], { animate: false });
+    });
     // The drag pans the map natively (inertia included); the selection
     // rides the pan, and the fetch resumes when the map settles.
     map.on("move", () => {
@@ -148,6 +155,7 @@ export default function MapPanel() {
     map.on("moveend", () => {
       if (!moveStart()) return;
       setMoveStart(undefined);
+      setFollowMap(false);
       resumeFetch();
     });
     // Leaflet has to re-measure once the panel is shown again.
@@ -172,6 +180,7 @@ export default function MapPanel() {
           moved: false,
           finishing: false,
         });
+        setFollowMap(true);
         suspendFetch();
         return;
       }
@@ -199,6 +208,7 @@ export default function MapPanel() {
           setMoveStart({ ...move, finishing: true });
         } else {
           setMoveStart(undefined);
+          setFollowMap(false);
           resumeFetch();
         }
         return;
