@@ -16,7 +16,7 @@ const toBounds = ([lon0, lat0, lon1, lat1]: Bbox): L.LatLngBoundsExpression => [
 /* The location map: pan it with the move tool, drag out the area to render
  * with the select tool, and drag the selection to move it as-is. */
 export default function MapPanel() {
-  const { params, setBbox, recenter, tiles, suspendFetch, resumeFetch } = useRidge();
+  const { params, setBbox, recenter, tiles, setGeoScale, suspendFetch, resumeFetch } = useRidge();
   const [tool, setTool] = createSignal<MapTool>("move");
   const [open, setOpen] = createSignal(true);
   const [drawStart, setDrawStart] = createSignal<LatLng>();
@@ -40,6 +40,20 @@ export default function MapPanel() {
     // Never zoom out past the point where the world is narrower than the panel.
     const fitWorldWidth = () => map.setMinZoom(Math.max(0, Math.ceil(Math.log2(map.getSize().x / 256))));
     map.on("resize", fitWorldWidth);
+
+    // Publish the map's degrees per screen pixel: the canvas move-drag
+    // travels at this scale, so the same gesture moves the selection the
+    // same amount on both surfaces.
+    const publishGeoScale = () => {
+      const b = map.getBounds(), size = map.getSize();
+      if (size.x < 1 || size.y < 1) return;
+      setGeoScale({
+        latPerPx: Math.abs(b.getNorth() - b.getSouth()) / size.y,
+        lngPerPx: Math.abs(b.getEast() - b.getWest()) / size.x,
+      });
+    };
+    map.on("move zoom viewreset resize", publishGeoScale);
+    publishGeoScale();
 
     // SRTM covers only 60S..60N; shade the rest. The outer corner sits at
     // the projection's own limit: 90° has no Mercator coordinates, and a

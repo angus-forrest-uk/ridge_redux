@@ -10,25 +10,33 @@ const ZOOM_STEP = 1.15;
 type CanvasTool = "pan" | "move";
 
 /* Canvas drag in move mode: the pointer delta (canvas px) translated into
- * bbox degrees, along the axes the figure is drawn in. */
+ * bbox degrees at the MAP's own scale, so the same gesture travels the
+ * same distance on both surfaces. Falls back to the figure layout when the
+ * map hasn't reported a scale (panel never shown). */
 function moveDelta(
+  geoScale: { latPerPx: number; lngPerPx: number } | undefined,
   paramsBbox: Bbox, numLines: number, elevationPts: number,
   layout: Layout, scale: number, dxPx: number, dyPx: number,
 ): { dLat: number; dLng: number } {
   const [w, s, e, n] = paramsBbox;
+  if (geoScale) {
+    // Grab semantics: content follows the pointer, so the viewport (and
+    // the bbox) moves OPPOSITE the pointer delta.
+    return { dLat: dyPx * geoScale.latPerPx, dLng: -dxPx * geoScale.lngPerPx };
+  }
   const cellPerPxX = (layout.xlim[1] - layout.xlim[0]) / (layout.axes[2] - layout.axes[0]) / scale;
   const displayPerPxY = (layout.ylim[1] - layout.ylim[0]) / (layout.axes[3] - layout.axes[1]) / scale;
-  const dLng = dxPx * cellPerPxX * ((e - w) / Math.max(1, elevationPts - 1));
-  // Rows are spaced LINE_SPACING display units apart and run northward,
-  // while canvas y runs down: the sign flips.
-  const dLat = -(dyPx * displayPerPxY / LINE_SPACING) * ((n - s) / Math.max(1, numLines));
+  const dLng = -dxPx * cellPerPxX * ((e - w) / Math.max(1, elevationPts - 1));
+  // Rows are spaced LINE_SPACING display units apart and run northward;
+  // grabbing downward slides the terrain down, i.e. the view north.
+  const dLat = (dyPx * displayPerPxY / LINE_SPACING) * ((n - s) / Math.max(1, numLines));
   return { dLat, dLng };
 }
 
 /* The artwork canvas. Drag pans or moves the area (toggle), the wheel
  * zooms about the cursor, and a double-click fits the figure again. */
 export default function Stage() {
-  const { raw, scene, status, params, setBbox, suspendFetch, resumeFetch } = useRidge();
+  const { raw, scene, status, params, setBbox, geoScale, suspendFetch, resumeFetch } = useRidge();
   let canvas!: HTMLCanvasElement;
   const [size, setSize] = createSignal({ width: 0, height: 0 });
   const [tool, setTool] = createSignal<CanvasTool>("pan");
@@ -113,7 +121,7 @@ export default function Stage() {
             if (s && v) {
               const p = at(e);
               const { dLat, dLng } = moveDelta(
-                md.bbox, params.num_lines, params.elevation_pts,
+                geoScale(), md.bbox, params.num_lines, params.elevation_pts,
                 s.layout, v.scale, p.x - md.x, p.y - md.y,
               );
               // Commits as it goes: the state layer suspends the fetch,

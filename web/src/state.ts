@@ -32,6 +32,10 @@ export function createRidgeState(initial: Params = DEFAULTS) {
   // green coverage shading. Refreshed after each elevation fetch: the
   // prefetch grows the set as you move.
   const [tiles, setTiles] = createSignal<[number, number][]>([]);
+  // The map panel's current degrees per screen pixel, published so the
+  // canvas move-drag travels the same world distance as the same gesture
+  // on the map.
+  const [geoScale, setGeoScale] = createSignal<{ latPerPx: number; lngPerPx: number }>();
   async function refreshTiles() {
     try {
       setTiles(await fetchTiles());
@@ -123,6 +127,8 @@ export function createRidgeState(initial: Params = DEFAULTS) {
     status,
     recenter,
     tiles,
+    geoScale,
+    setGeoScale,
     /* Silence fetches while a move-drag re-windows the cached disc; the
      * drag ends with resumeFetch(), which loads the final position at
      * once. */
