@@ -9,20 +9,17 @@ const ZOOM_STEP = 1.15;
 
 type CanvasTool = "pan" | "move";
 
-/* Canvas drag in move mode: the pointer delta (canvas px) translated into
- * bbox degrees at the MAP's own scale, so the same gesture travels the
- * same distance on both surfaces — dragging down moves the selection (and
- * the rendered terrain) down on both. Falls back to the figure layout
- * when the map hasn't reported a scale (panel never shown). */
+/* Canvas drag in move mode: grab semantics — the terrain follows the
+ * hand, so the bbox moves OPPOSITE the pointer delta. The travel uses the
+ * map's own degrees-per-pixel, so the same gesture moves the selection
+ * the same distance on both surfaces; the figure layout is the fallback. */
 function moveDelta(
   geoScale: { latPerPx: number; lngPerPx: number } | undefined,
   paramsBbox: Bbox, numLines: number, elevationPts: number,
   layout: Layout, scale: number, dxPx: number, dyPx: number,
 ): { dLat: number; dLng: number } {
   const g = geoScale ?? fallbackGeoScale(paramsBbox, numLines, elevationPts, layout, scale);
-  // Dragging down moves the selection — and the rendered terrain — south,
-  // matching the map's grab-pan direction.
-  return { dLat: -dyPx * g.latPerPx, dLng: dxPx * g.lngPerPx };
+  return { dLat: dyPx * g.latPerPx, dLng: -dxPx * g.lngPerPx };
 }
 
 /* Degrees per canvas pixel from the figure layout: horizontal through the
