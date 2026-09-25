@@ -9,22 +9,10 @@ const ZOOM_STEP = 1.15;
 
 type CanvasTool = "pan" | "move";
 
-/* Canvas drag in move mode: grab semantics — the terrain follows the
- * hand, so the bbox moves OPPOSITE the pointer delta. The travel uses the
- * map's own degrees-per-pixel, so the same gesture moves the selection
- * the same distance on both surfaces; the figure layout is the fallback. */
-function moveDelta(
-  geoScale: { latPerPx: number; lngPerPx: number } | undefined,
-  paramsBbox: Bbox, numLines: number, elevationPts: number,
-  layout: Layout, scale: number, dxPx: number, dyPx: number,
-): { dLat: number; dLng: number } {
-  const g = geoScale ?? fallbackGeoScale(paramsBbox, numLines, elevationPts, layout, scale);
-  return { dLat: dyPx * g.latPerPx, dLng: -dxPx * g.lngPerPx };
-}
-
 /* Degrees per canvas pixel from the figure layout: horizontal through the
  * axes rect (xlim is in window-cell units), vertical through the ridge
- * baselines (LINE_SPACING display units per row). */
+ * baselines (LINE_SPACING display units per row). Used when the map panel
+ * hasn't published its own scale yet. */
 function fallbackGeoScale(
   paramsBbox: Bbox, numLines: number, elevationPts: number,
   layout: Layout, scale: number,
@@ -48,9 +36,16 @@ export default function Stage() {
   // Unset until the user pans or zooms: the figure then stays fitted.
   const [panned, setPanned] = createSignal<View>();
   const [panDrag, setPanDrag] = createSignal<{ x: number; y: number; view: View }>();
-  // A move drag: the pointer start and the bbox it started from. The bbox
-  // commits as it goes (the state layer suspends fetches until release).
-  const [moveDrag, setMoveDrag] = createSignal<{ x: number; y: number; bbox: Bbox }>();
+  // A move drag: the picture slides with the hand (same view transform as
+  // the pan tool), and the bbox commits ONCE on release from the net
+  // translation. No per-frame geographic math — the direction of the live
+  // slide is the direction of the hand, by construction.
+  const [moveDrag, setMoveDrag] = createSignal<{
+    x: number;
+    y: number;
+    view: View;
+    bbox: Bbox;
+  }>();
   // Bumped when web fonts finish loading: the label is drawn in one (Cinzel),
   // and a canvas doesn't redraw by itself when it arrives.
   const [fontsLoaded, setFontsLoaded] = createSignal(0);
@@ -109,8 +104,9 @@ export default function Stage() {
         onPointerDown={(e) => {
           const p = at(e);
           if (tool() === "move") {
-            if (!scene()) return;
-            setMoveDrag({ x: p.x, y: p.y, bbox: [...params.bbox] as Bbox });
+            const v = view();
+            if (!scene() || !v) return;
+            setMoveDrag({ x: p.x, y: p.y, view: v, bbox: [...params.bbox] as Bbox });
             suspendFetch();
           } else {
             const v = view();
@@ -120,30 +116,25 @@ export default function Stage() {
           canvas.setPointerCapture(e.pointerId);
         }}
         onPointerMove={(e) => {
-          const md = moveDrag();
-          if (md) {
-            const s = scene(), v = view();
-            if (s && v) {
-              const p = at(e);
-              const { dLat, dLng } = moveDelta(
-                geoScale(), md.bbox, params.num_lines, params.elevation_pts,
-                s.layout, v.scale, p.x - md.x, p.y - md.y,
-              );
-              // Commits as it goes: the state layer suspends the fetch,
-              // so this redraws from the cached disc at frame rate.
-              setBbox(movedBbox(md.bbox, dLat, dLng));
-            }
-            return;
-          }
-          const d = panDrag();
+          const d = moveDrag() ?? panDrag();
           if (!d) return;
           const p = at(e);
+          // Both tools slide the drawn picture with the hand.
           setPanned({ ...d.view, tx: d.view.tx + p.x - d.x, ty: d.view.ty + p.y - d.y });
         }}
-        onPointerUp={() => {
-          if (moveDrag()) resumeFetch();
-          setMoveDrag(undefined);
+        onPointerUp={(e) => {
+          const md = moveDrag();
           setPanDrag(undefined);
+          setMoveDrag(undefined);
+          if (!md) return;
+          const p = at(e);
+          const g = geoScale() ?? fallbackGeoScale(
+            md.bbox, params.num_lines, params.elevation_pts, scene()!.layout, md.view.scale,
+          );
+          // Pulling the picture down reveals terrain further north; right
+          // reveals west: the selection moves opposite the slide.
+          setBbox(movedBbox(md.bbox, (p.y - md.y) * g.latPerPx, -(p.x - md.x) * g.lngPerPx));
+          resumeFetch();
         }}
         onWheel={(e) => {
           e.preventDefault();
